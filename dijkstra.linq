@@ -307,9 +307,10 @@ internal static class GraphExtensions {
         if (DebugEdgeSelection)
             edgeSelection.Dump($"Edge selection via {label}", noTotals: true);
         
-        var dot = edgeSelection.ToDot(graph.Order,
-                                      $"Shortest-path tree via {label}");
+        var description = $"Shortest-path tree via {label}";
+        var dot = edgeSelection.ToDot(graph.Order, description);
         if (DebugDot) dot.Dump($"DOT code via {label}");
+        dot.Visualize(description);
         
         return parents;
     }
@@ -344,12 +345,12 @@ internal static class GraphExtensions {
     ToDot(this IEnumerable<(int src, int dest, int weight, bool marked)>
                 edgeSelection,
           int order,
-          string graphLabel)
+          string description)
     {
         const int indent = 4;
         var margin = new string(' ', indent);
         var builder = new StringBuilder();
-        builder.AppendLine($"digraph \"{graphLabel}\" {{");
+        builder.AppendLine($"digraph \"{description}\" {{");
         
         // Emit the vertices in ascending order, to be drawn as circles.
         foreach (var vertex in Enumerable.Range(0, order))
@@ -366,6 +367,38 @@ internal static class GraphExtensions {
         }
         
         return builder.AppendLine("}").ToString();
+    }
+    
+    private static void Visualize(this string dot, string description)
+    {
+        var dir = Path.GetTempPath();
+        var guid = Guid.NewGuid();
+        var dotPath = Path.Combine(dir, $"{guid}.dot");
+        var svgPath = Path.Combine(dir, $"{guid}.svg");
+        
+        using (var writer = File.CreateText(dotPath))
+            writer.Write(dot);
+        
+        var proc = new Process();
+        
+        proc.StartInfo.ArgumentList.Add("-Tsvg");
+        proc.StartInfo.ArgumentList.Add("-o");
+        proc.StartInfo.ArgumentList.Add(svgPath);
+        proc.StartInfo.ArgumentList.Add(dotPath);
+        
+        proc.StartInfo.CreateNoWindow = true;
+        proc.StartInfo.FileName = "dot";
+        proc.StartInfo.RedirectStandardInput = false;
+        proc.StartInfo.RedirectStandardOutput = false;
+        proc.StartInfo.RedirectStandardError = true;
+        proc.StartInfo.UseShellExecute = false;
+        
+        proc.Start();
+        // FIXME: Read standard error?
+        proc.WaitForExit();
+        // FIXME: Look at exit code?
+        
+        Util.Image(svgPath).Dump(description);
     }
 }
 
