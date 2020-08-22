@@ -286,6 +286,7 @@ internal sealed class Graph {
 internal static class GraphExtensions {
     private static bool DebugParents => true;
     private static bool DebugEdgeSelection => true;
+    private static bool DebugDot => true;
 
     internal static long?[]
     ShowShortestPaths(this Graph graph,
@@ -297,16 +298,18 @@ internal static class GraphExtensions {
     
         var parents = graph.ComputeShortestPaths(source,
                                                  priorityQueueSupplier);
-        
         if (DebugParents) parents.Dump($"Parents via {label}");
         
         var edgeSelection =
             EmitEdgeSelection(graph.Edges,
                               edge => parents[edge.dest] == edge.src)
                 .ToArray();
-        
         if (DebugEdgeSelection)
             edgeSelection.Dump($"Edge selection via {label}", noTotals: true);
+        
+        var dot = edgeSelection.ToDot(graph.Order,
+                                      $"Shortest-path tree via {label}");
+        if (DebugDot) dot.Dump($"DOT code via {label}");
         
         return parents;
     }
@@ -335,6 +338,34 @@ internal static class GraphExtensions {
                     yield return (src, dest, weight, false);
             }
         }
+    }
+    
+    private static string
+    ToDot(this IEnumerable<(int src, int dest, int weight, bool marked)>
+                edgeSelection,
+          int order,
+          string graphLabel)
+    {
+        const int indent = 4;
+        var margin = new string(' ', indent);
+        var builder = new StringBuilder();
+        builder.AppendLine($"digraph \"{graphLabel}\" {{");
+        
+        // Emit the vertices in ascending order, to be drawn as circles.
+        foreach (var vertex in Enumerable.Range(0, order))
+            builder.AppendLine($"{margin}{vertex} [shape=\"circle\"]");
+            
+        builder.AppendLine();
+        
+        // Emit the edges in the order given, colorized according to selection.
+        foreach (var (src, dest, weight, marked) in edgeSelection) {
+            var edge = $"{src} -> {dest}";
+            var color = $"color=\"{(marked ? "red" : "gray")}\"";
+            var label = $"label=\"{weight}\"";
+            builder.AppendLine($"{margin}{edge} [{color} {label}]");
+        }
+        
+        return builder.AppendLine("}").ToString();
     }
 }
 
