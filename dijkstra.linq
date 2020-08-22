@@ -50,19 +50,23 @@ internal sealed class NaivePrimHeap<TKey, TValue> : IPrimHeap<TKey, TValue>
     public KeyValuePair<TKey, TValue> ExtractMin()
     {
         // TODO: Implement a MinBy extension method and refactor to use it.
+        
+        KeyValuePair<TKey, TValue> entry;
+        
         using (var en = _entries.GetEnumerator()) {
             if (!en.MoveNext())
                 throw new InvalidOperationException("nothing to extract");
             
-            var entry = en.Current;
+            entry = en.Current;
             
             while (en.MoveNext()) {
                 if (_comparer.Compare(en.Current.Value, entry.Value) < 0)
                     entry = en.Current;
             }
-            
-            return entry;
         }
+        
+        _entries.Remove(entry.Key);
+        return entry;
     }
         
     private readonly IComparer<TValue> _comparer;
@@ -322,37 +326,17 @@ internal sealed class Controller {
 
 private static void Run(Graph graph)
 {
-    Console.WriteLine("Running.");
-
     var naive = graph.ComputeShortestPaths<NaivePrimHeap<int, long>>(0);
     naive.Dump("Parents, by Dijkstra's algorithm with a NAIVE PRIORITY QUEUE");
     
-    "Still running.".Dump();
-    
     var binary = graph.ComputeShortestPaths<BinaryPrimHeap<int, long>>(0);
-    binary.Dump("Parents, by Dijkstra's algorith with a BINARY MINHEAP");
+    binary.Dump("Parents, by Dijkstra's algorithm with a BINARY MINHEAP");
     
     naive.SequenceEqual(binary).Dump("Same result?");
-    
-    lock (locker) finished = true;
 }
-
-private static object locker = new object();
-
-private static bool finished = false;
 
 private static void Main()
 {
     var controller = new Controller();
     controller.Run += Run;
-    
-    for (; ; ) {
-        Thread.Sleep(100);
-        
-        lock (locker) {
-            if (finished) break;
-        }
-    }
-    //controller.Run += delegate { Console.WriteLine("Running."); };
-    controller.Run += graph => Task.Run(() => Run(graph));
 }
