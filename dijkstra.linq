@@ -269,17 +269,14 @@ internal sealed class Controller {
                         string initialEdges,
                         string initialSource)
     {
+        _order = new TextArea(initialOrder, columns: 10);
         _order.Rows = 1;
-        _order.Cols = 10;
-        _order.Text = initialOrder;
         
+        _edges = new TextArea(initialEdges, columns: 50);
         _edges.Rows = 20;
-        _edges.Cols = 50;
-        _edges.Text = initialEdges;
         
+        _source = new TextArea(initialSource, columns: 10);
         _source.Rows = 1;
-        _source.Cols = 10;
-        _source.Text = initialSource;
         
         _buttons = new WrapPanel(new Button("Run", DoRun),
                                  new Button("Clear", DoClear));
@@ -347,11 +344,11 @@ internal sealed class Controller {
         Show();
     }
 
-    private readonly TextArea _order = new TextArea();
+    private readonly TextArea _order;
     
-    private readonly TextArea _edges = new TextArea();
+    private readonly TextArea _edges;
     
-    private readonly TextArea _source = new TextArea();
+    private readonly TextArea _source;
     
     private readonly WrapPanel _buttons;
 }
