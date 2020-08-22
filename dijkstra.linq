@@ -1,4 +1,7 @@
-<Query Kind="Program" />
+<Query Kind="Program">
+  <Namespace>LINQPad.Controls</Namespace>
+  <Namespace>System.Threading.Tasks</Namespace>
+</Query>
 
 /// <summary>
 /// Priority queue operations for Prim's and Dijkstra's algorithms.
@@ -27,9 +30,9 @@ internal interface IPrimHeap<TKey, TValue> {
 /// <remarks>O(1) insert/decrease. O(n) extract-min.</remarks>
 internal sealed class NaivePrimHeap<TKey, TValue> : IPrimHeap<TKey, TValue>
         where TKey : notnull {
-    internal NaivePrimHeap() : this(Comparer<TValue>.Default) { }
+    public NaivePrimHeap() : this(Comparer<TValue>.Default) { }
         
-    internal NaivePrimHeap(IComparer<TValue> comparer)
+    public NaivePrimHeap(IComparer<TValue> comparer)
         => _comparer = comparer;
     
     public int Count => _entries.Count;
@@ -75,9 +78,9 @@ internal sealed class NaivePrimHeap<TKey, TValue> : IPrimHeap<TKey, TValue>
 /// <remarks>O(log n) insert/decrease. O(log n) extract-min.</remarks>
 internal sealed class BinaryPrimHeap<TKey, TValue> : IPrimHeap<TKey, TValue>
         where TKey : notnull {
-    internal BinaryPrimHeap() : this(Comparer<TValue>.Default) { }
+    public BinaryPrimHeap() : this(Comparer<TValue>.Default) { }
         
-    internal BinaryPrimHeap(IComparer<TValue> comparer)
+    public BinaryPrimHeap(IComparer<TValue> comparer)
         => _comparer = comparer;
     
     public int Count => _heap.Count;
@@ -184,7 +187,7 @@ internal sealed class BinaryPrimHeap<TKey, TValue> : IPrimHeap<TKey, TValue>
 /// <summary>
 /// A weighted directed graph represented as an adjacency list.
 /// </summary>
-sealed class Graph {
+internal sealed class Graph {
     internal Graph(int order)
     {
         if (order < 0) {
@@ -249,9 +252,107 @@ sealed class Graph {
     private readonly IList<IList<(int dest, int weight)>> _adj;
 }
 
-private static class Program {
-    private static void Main()
+/// <summary>UI to accept a graph description and trigger a run.</summary>
+internal sealed class Controller {
+    internal Controller() : this(
+        initialOrder: "6",
+        initialEdges: "1 2 17\n3 0 12\n0 5 19\n1 5 8\n4 3 100\n5 4 2\n4 2 60\n1 4 7\n2 1 69")
     {
-        
     }
+
+    internal Controller(string initialOrder, string initialEdges)
+    {
+        _order.Rows = 1;
+        _order.Cols = 10;
+        _order.Text = initialOrder;
+        
+        _edges.Rows = 20;
+        _edges.Cols = 50;
+        _edges.Text = initialEdges;
+        
+        _run.Click += delegate {
+            // Always build the graph, even if no handler is registered to
+            // accept it, so that wrong input will always be reported.
+            var graph = BuildGraph();
+            
+            Run?.Invoke(graph);
+        };
+        
+        _order.Dump("Order");
+        _edges.Dump("Edges");
+        _run.Dump();
+    }
+    
+    internal event Action<Graph>? Run;
+    
+    private Graph BuildGraph()
+    {
+        var graph = new Graph(ReadOrder());
+        
+        foreach (var (src, dest, weight) in ReadEdges())
+            graph.Add(src, dest, weight);
+        
+        return graph;
+    }
+    
+    private int ReadOrder() => int.Parse(_order.Text);
+    
+    private (int src, int dest, int weight)[] ReadEdges()
+        => _edges.Text
+                 .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                 .Where(line => !string.IsNullOrWhiteSpace(line))
+                 .Select(line =>
+                    line.Split(default(char[]?),
+                               StringSplitOptions.RemoveEmptyEntries)
+                        .Select(int.Parse)
+                        .ToArray())
+                 .Select(vals =>
+                    vals.Length == 3
+                        ? (src: vals[0], dest: vals[1], weight: vals[2])
+                        : throw new InvalidOperationException(
+                                message: "wrong record length"))
+                 .ToArray();
+
+    private readonly TextArea _order = new TextArea();
+    
+    private readonly TextArea _edges = new TextArea();
+    
+    private readonly Button _run = new Button("Run");
+}
+
+private static void Run(Graph graph)
+{
+    Console.WriteLine("Running.");
+
+    var naive = graph.ComputeShortestPaths<NaivePrimHeap<int, long>>(0);
+    naive.Dump("Parents, by Dijkstra's algorithm with a NAIVE PRIORITY QUEUE");
+    
+    "Still running.".Dump();
+    
+    var binary = graph.ComputeShortestPaths<BinaryPrimHeap<int, long>>(0);
+    binary.Dump("Parents, by Dijkstra's algorith with a BINARY MINHEAP");
+    
+    naive.SequenceEqual(binary).Dump("Same result?");
+    
+    lock (locker) finished = true;
+}
+
+private static object locker = new object();
+
+private static bool finished = false;
+
+private static void Main()
+{
+    var controller = new Controller();
+    controller.Run += Run;
+    
+    for (; ; ) {
+        Thread.Sleep(100);
+        
+        lock (locker) {
+            if (finished) break;
+        }
+    }
+    //controller.Run += delegate { Console.WriteLine("Running."); };
+    controller.Run += graph => Task.Run(() => Run(graph));
 }
