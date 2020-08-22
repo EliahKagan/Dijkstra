@@ -281,29 +281,8 @@ internal sealed class Controller {
         _source.Cols = 10;
         _source.Text = initialSource;
         
-        var run = new Button("Run", delegate {
-            // Always build the graph, even if no handler is registered to
-            // accept it, so that wrong input will always be reported.
-            var graph = BuildGraph();
-            var source = int.Parse(_source.Text);
-            Run?.Invoke(graph, source);
-        });
-        
-        var clear = new Button("Clear", delegate {
-            var order = _order.Text;
-            var edges = _edges.Text;
-            var source = _source.Text;
-            
-            Util.ClearResults();
-            
-            _order.Text = order;
-            _edges.Text = edges;
-            _source.Text = source;
-            
-            Show();
-        });
-        
-        _buttons = new WrapPanel(run, clear);
+        _buttons = new WrapPanel(new Button("Run", DoRun),
+                                 new Button("Clear", DoClear));
     }
     
     internal void Show()
@@ -315,6 +294,15 @@ internal sealed class Controller {
     }
     
     internal event Action<Graph, int>? Run;
+    
+    private void DoRun(Button sender)
+    {
+        // Always build the graph, even if no handler is registered to
+        // accept it, so that wrong input will always be reported.
+        var graph = BuildGraph();
+        var source = int.Parse(_source.Text);
+        Run?.Invoke(graph, source);
+    }
     
     private Graph BuildGraph()
     {
@@ -343,6 +331,21 @@ internal sealed class Controller {
                         : throw new InvalidOperationException(
                                 message: "wrong record length"))
                  .ToArray();
+    
+    private void DoClear(Button sender)
+    {
+        var order = _order.Text;
+        var edges = _edges.Text;
+        var source = _source.Text;
+        
+        Util.ClearResults();
+        
+        _order.Text = order;
+        _edges.Text = edges;
+        _source.Text = source;
+        
+        Show();
+    }
 
     private readonly TextArea _order = new TextArea();
     
@@ -369,5 +372,4 @@ private static void Main()
     var controller = new Controller();
     controller.Run += Run;
     controller.Show();
-    //Util.ClearResults();
 }
