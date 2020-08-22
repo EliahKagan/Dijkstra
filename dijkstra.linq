@@ -3,6 +3,36 @@
   <Namespace>System.Threading.Tasks</Namespace>
 </Query>
 
+/// <summary>LINQ-style extension methods.</summary>
+internal static class EnumerableExtensions {
+    internal static TSource
+    MinBy<TSource, TKey>(this IEnumerable<TSource> source,
+                         Func<TSource, TKey> keySelector,
+                         IComparer<TKey>? comparer = null)
+    {
+        comparer ??= Comparer<TKey>.Default;
+        
+        using var en = source.GetEnumerator();
+        
+        if (!en.MoveNext())
+            throw new InvalidOperationException("Source contains no elements");
+        
+        var min = en.Current;
+        var minKey = keySelector(min);
+        
+        while (en.MoveNext()) {
+            var curKey = keySelector(en.Current);
+            
+            if (comparer.Compare(curKey, minKey) < 0) {
+                min = en.Current;
+                minKey = curKey;
+            }
+        }
+        
+        return min;
+    }
+}
+
 /// <summary>
 /// Priority queue operations for Prim's and Dijkstra's algorithms.
 /// </summary>
@@ -49,23 +79,8 @@ internal sealed class NaivePrimHeap<TKey, TValue> : IPrimHeap<TKey, TValue>
     
     public KeyValuePair<TKey, TValue> ExtractMin()
     {
-        // TODO: Implement a MinBy extension method and refactor to use it.
-        
-        KeyValuePair<TKey, TValue> entry;
-        
-        using (var en = _entries.GetEnumerator()) {
-            if (!en.MoveNext())
-                throw new InvalidOperationException("nothing to extract");
-            
-            entry = en.Current;
-            
-            while (en.MoveNext()) {
-                if (_comparer.Compare(en.Current.Value, entry.Value) < 0)
-                    entry = en.Current;
-            }
-        }
-        
-        _entries.Remove(entry.Key);
+        var entry = _entries.MinBy(entry => entry.Value, _comparer);
+        _entries.Remove(entry);
         return entry;
     }
         
@@ -108,7 +123,7 @@ internal sealed class BinaryPrimHeap<TKey, TValue> : IPrimHeap<TKey, TValue>
     public KeyValuePair<TKey, TValue> ExtractMin()
     {
         if (Count == 0)
-            throw new InvalidOperationException("nothing to extract");
+            throw new InvalidOperationException("Nothing to extract");
         
         var entry = _heap[0];
         var last = Count - 1;
@@ -197,7 +212,7 @@ internal sealed class Graph {
         if (order < 0) {
             throw new ArgumentOutOfRangeException(
                     paramName: nameof(order),
-                    message: "can't have negatively many vertices");
+                    message: "Can't have negatively many vertices");
         }
     
         _adj = new List<IList<(int dest, int weight)>>(capacity: order);
@@ -216,20 +231,21 @@ internal sealed class Graph {
         if (weight < 0) {
             throw new ArgumentException(
                     paramName: nameof(weight),
-                    message: "negative weights are not supported");
+                    message: "Negative weights are not supported");
         }
         
         _adj[src].Add((dest, weight));
     }
     
-    internal long?[] ComputeShortestPaths<THeap>(int start)
-        where THeap : IPrimHeap<int, long>, new()
+    internal long?[]
+    ComputeShortestPaths(int start,
+                         Func<IPrimHeap<int, long>> priorityQueueSupplier)
     {
         CheckVertex(nameof(start), start);
     
         var parents = new long?[Order];
         var done = new BitArray(Order);
-        var heap = new THeap();
+        var heap = priorityQueueSupplier();
         
         for (heap.InsertOrDecrease(start, 0L); heap.Count != 0; ) {
             var (src, cost) = heap.ExtractMin();
@@ -244,16 +260,82 @@ internal sealed class Graph {
         return parents;
     }
     
+    internal IEnumerable<(int src, int dest, int weight)> Edges
+    {
+        get {
+            foreach (var src in Enumerable.Range(0, Order)) {
+                foreach (var (dest, weight) in _adj[src])
+                    yield return (src, dest, weight);
+            }
+        }
+    }
+    
     private void CheckVertex(string paramName, int vertex)
     {
         if (!(0 <= vertex && vertex < Order)) {
             throw new ArgumentOutOfRangeException(
                     paramName: paramName,
-                    message: $"vertex {vertex} out of range");
+                    message: $"Vertex {vertex} out of range");
         }
     }
 
     private readonly IList<IList<(int dest, int weight)>> _adj;
+}
+
+/// <summary>Extended functionality for graphs.</summary>
+internal static class GraphExtensions {
+    private static bool DebugParents => true;
+    private static bool DebugEdgeSelection => true;
+
+    internal static long?[]
+    ShowShortestPaths(this Graph graph,
+                      int source,
+                      Func<IPrimHeap<int, long>> priorityQueueSupplier,
+                      string label)
+    {
+        label = label.ToUpper();
+    
+        var parents = graph.ComputeShortestPaths(source,
+                                                 priorityQueueSupplier);
+        
+        if (DebugParents) parents.Dump($"Parents via {label}");
+        
+        var edgeSelection =
+            EmitEdgeSelection(graph.Edges,
+                              edge => parents[edge.dest] == edge.src)
+                .ToArray();
+        
+        if (DebugEdgeSelection)
+            edgeSelection.Dump($"Edge selection via {label}", noTotals: true);
+        
+        return parents;
+    }
+    
+    private static IEnumerable<(int src, int dest, int weight, bool marked)>
+    EmitEdgeSelection(IEnumerable<(int src, int dest, int weight)> edges,
+                      Func<(int src, int dest), bool> predicate)
+    {
+        var parallels = new Dictionary<(int src, int dest),
+                                       (int src, int dest, int weight)[]>(
+                edges.GroupBy(edge => (edge.src, edge.dest))
+                     .Select(group => KeyValuePair.Create(group.Key,
+                                                          group.ToArray())));
+        
+        foreach (var (endpoints, parallelEdges) in parallels) {
+            if (predicate(endpoints)) {
+                var indices = Enumerable.Range(0, parallelEdges.Length);
+                var best = indices.MinBy(i => parallelEdges[i].weight);
+                
+                foreach (var i in indices) {
+                    var (src, dest, weight) = parallelEdges[i];
+                    yield return (src, dest, weight, i == best);
+                }
+            } else {
+                foreach (var (src, dest, weight) in parallelEdges)
+                    yield return (src, dest, weight, false);
+            }
+        }
+    }
 }
 
 /// <summary>UI to accept a graph description and trigger a run.</summary>
@@ -355,11 +437,13 @@ internal sealed class Controller {
 
 private static void Run(Graph graph, int source)
 {
-    var naive = graph.ComputeShortestPaths<NaivePrimHeap<int, long>>(source);
-    naive.Dump("Dijkstra parents via NAIVE PRIORITY QUEUE");
+    var naive = graph.ShowShortestPaths(source,
+                                        () => new NaivePrimHeap<int, long>(),
+                                        "naive priority queue");
     
-    var binary = graph.ComputeShortestPaths<BinaryPrimHeap<int, long>>(source);
-    binary.Dump("Dijkstra parents via BINARY MINHEAP");
+    var binary = graph.ShowShortestPaths(source,
+                                         () => new BinaryPrimHeap<int, long>(),
+                                         "binary minheap");
     
     naive.SequenceEqual(binary).Dump("Same result?");
 }
