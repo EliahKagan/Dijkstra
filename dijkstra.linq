@@ -260,11 +260,14 @@ internal sealed class Graph {
 internal sealed class Controller {
     internal Controller() : this(
         initialOrder: "6",
-        initialEdges: "1 2 17\n3 0 12\n0 5 19\n1 5 8\n4 3 100\n5 4 2\n4 2 60\n1 4 7\n2 1 69")
+        initialEdges: "1 2 17\n3 0 12\n0 5 19\n1 5 8\n4 3 100\n5 4 2\n4 2 60\n1 4 7\n2 1 69",
+        initialSource: "0")
     {
     }
 
-    internal Controller(string initialOrder, string initialEdges)
+    internal Controller(string initialOrder,
+                        string initialEdges,
+                        string initialSource)
     {
         _order.Rows = 1;
         _order.Cols = 10;
@@ -274,20 +277,25 @@ internal sealed class Controller {
         _edges.Cols = 50;
         _edges.Text = initialEdges;
         
+        _source.Rows = 1;
+        _source.Cols = 10;
+        _source.Text = initialSource;
+        
         _run.Click += delegate {
             // Always build the graph, even if no handler is registered to
             // accept it, so that wrong input will always be reported.
             var graph = BuildGraph();
-            
-            Run?.Invoke(graph);
+            var source = int.Parse(_source.Text);
+            Run?.Invoke(graph, source);
         };
         
         _order.Dump("Order");
         _edges.Dump("Edges");
+        _source.Dump("Source");
         _run.Dump();
     }
     
-    internal event Action<Graph>? Run;
+    internal event Action<Graph, int>? Run;
     
     private Graph BuildGraph()
     {
@@ -321,16 +329,18 @@ internal sealed class Controller {
     
     private readonly TextArea _edges = new TextArea();
     
+    private readonly TextArea _source = new TextArea();
+    
     private readonly Button _run = new Button("Run");
 }
 
-private static void Run(Graph graph)
+private static void Run(Graph graph, int source)
 {
-    var naive = graph.ComputeShortestPaths<NaivePrimHeap<int, long>>(0);
-    naive.Dump("Parents, by Dijkstra's algorithm with a NAIVE PRIORITY QUEUE");
+    var naive = graph.ComputeShortestPaths<NaivePrimHeap<int, long>>(source);
+    naive.Dump("Dijkstra parents via NAIVE PRIORITY QUEUE");
     
-    var binary = graph.ComputeShortestPaths<BinaryPrimHeap<int, long>>(0);
-    binary.Dump("Parents, by Dijkstra's algorithm with a BINARY MINHEAP");
+    var binary = graph.ComputeShortestPaths<BinaryPrimHeap<int, long>>(source);
+    binary.Dump("Dijkstra parents via BINARY MINHEAP");
     
     naive.SequenceEqual(binary).Dump("Same result?");
 }
