@@ -281,18 +281,37 @@ internal sealed class Controller {
         _source.Cols = 10;
         _source.Text = initialSource;
         
-        _run.Click += delegate {
+        var run = new Button("Run", delegate {
             // Always build the graph, even if no handler is registered to
             // accept it, so that wrong input will always be reported.
             var graph = BuildGraph();
             var source = int.Parse(_source.Text);
             Run?.Invoke(graph, source);
-        };
+        });
         
+        var clear = new Button("Clear", delegate {
+            var order = _order.Text;
+            var edges = _edges.Text;
+            var source = _source.Text;
+            
+            Util.ClearResults();
+            
+            _order.Text = order;
+            _edges.Text = edges;
+            _source.Text = source;
+            
+            Show();
+        });
+        
+        _buttons = new WrapPanel(run, clear);
+    }
+    
+    internal void Show()
+    {
         _order.Dump("Order");
         _edges.Dump("Edges");
         _source.Dump("Source");
-        _run.Dump();
+        _buttons.Dump();
     }
     
     internal event Action<Graph, int>? Run;
@@ -331,7 +350,7 @@ internal sealed class Controller {
     
     private readonly TextArea _source = new TextArea();
     
-    private readonly Button _run = new Button("Run");
+    private readonly WrapPanel _buttons;
 }
 
 private static void Run(Graph graph, int source)
@@ -349,4 +368,6 @@ private static void Main()
 {
     var controller = new Controller();
     controller.Run += Run;
+    controller.Show();
+    //Util.ClearResults();
 }
