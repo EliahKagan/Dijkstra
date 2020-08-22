@@ -284,9 +284,9 @@ internal sealed class Graph {
 
 /// <summary>Extended functionality for graphs.</summary>
 internal static class GraphExtensions {
-    private static bool DebugParents => true;
-    private static bool DebugEdgeSelection => true;
-    private static bool DebugDot => true;
+    private static bool DebugParents => false;
+    private static bool DebugEdgeSelection => false;
+    private static bool DebugDot => false;
 
     internal static long?[]
     ShowShortestPaths(this Graph graph,
