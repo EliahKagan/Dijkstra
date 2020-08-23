@@ -60,9 +60,9 @@ internal interface IPriorityQueue<TKey, TValue> {
 /// <remarks>O(1) insert/decrease. O(n) extract-min.</remarks>
 internal sealed class NaivePriorityQueue<TKey, TValue>
         : IPriorityQueue<TKey, TValue> where TKey : notnull {
-    public NaivePriorityQueue() : this(Comparer<TValue>.Default) { }
+    internal NaivePriorityQueue() : this(Comparer<TValue>.Default) { }
 
-    public NaivePriorityQueue(IComparer<TValue> comparer)
+    internal NaivePriorityQueue(IComparer<TValue> comparer)
         => _comparer = comparer;
 
     public int Count => _entries.Count;
@@ -97,9 +97,9 @@ internal sealed class NaivePriorityQueue<TKey, TValue>
 /// <remarks>O(log n) insert/decrease. O(log n) extract-min.</remarks>
 internal sealed class BinaryHeap<TKey, TValue> : IPriorityQueue<TKey, TValue>
         where TKey : notnull {
-    public BinaryHeap() : this(Comparer<TValue>.Default) { }
+    internal BinaryHeap() : this(Comparer<TValue>.Default) { }
 
-    public BinaryHeap(IComparer<TValue> comparer)
+    internal BinaryHeap(IComparer<TValue> comparer)
         => _comparer = comparer;
 
     public int Count => _heap.Count;
