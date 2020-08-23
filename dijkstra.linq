@@ -36,7 +36,7 @@ internal static class EnumerableExtensions {
 /// <summary>
 /// Priority queue operations for Prim's and Dijkstra's algorithms.
 /// </summary>
-internal interface IPrimHeap<TKey, TValue> {
+internal interface IPriorityQueue<TKey, TValue> {
     /// <summary>The number of mappings stored in the heap.</summary>
     int Count { get; }
     
@@ -58,11 +58,11 @@ internal interface IPrimHeap<TKey, TValue> {
 /// A naive priority queue for Prim's and Dijkstra's algorithms.
 /// </summary>
 /// <remarks>O(1) insert/decrease. O(n) extract-min.</remarks>
-internal sealed class NaivePrimHeap<TKey, TValue> : IPrimHeap<TKey, TValue>
-        where TKey : notnull {
-    public NaivePrimHeap() : this(Comparer<TValue>.Default) { }
+internal sealed class NaivePriorityQueue<TKey, TValue>
+        : IPriorityQueue<TKey, TValue> where TKey : notnull {
+    public NaivePriorityQueue() : this(Comparer<TValue>.Default) { }
         
-    public NaivePrimHeap(IComparer<TValue> comparer)
+    public NaivePriorityQueue(IComparer<TValue> comparer)
         => _comparer = comparer;
     
     public int Count => _entries.Count;
@@ -95,11 +95,11 @@ internal sealed class NaivePrimHeap<TKey, TValue> : IPrimHeap<TKey, TValue>
 /// Dijkstra's algorithms. Sometimes called a "heap + map" data structure.
 /// </summary>
 /// <remarks>O(log n) insert/decrease. O(log n) extract-min.</remarks>
-internal sealed class BinaryPrimHeap<TKey, TValue> : IPrimHeap<TKey, TValue>
+internal sealed class BinaryHeap<TKey, TValue> : IPriorityQueue<TKey, TValue>
         where TKey : notnull {
-    public BinaryPrimHeap() : this(Comparer<TValue>.Default) { }
+    public BinaryHeap() : this(Comparer<TValue>.Default) { }
         
-    public BinaryPrimHeap(IComparer<TValue> comparer)
+    public BinaryHeap(IComparer<TValue> comparer)
         => _comparer = comparer;
     
     public int Count => _heap.Count;
@@ -239,7 +239,7 @@ internal sealed class Graph {
     
     internal long?[]
     ComputeShortestPaths(int start,
-                         Func<IPrimHeap<int, long>> priorityQueueSupplier)
+                         Func<IPriorityQueue<int, long>> priorityQueueSupplier)
     {
         CheckVertex(nameof(start), start);
     
@@ -291,7 +291,7 @@ internal static class GraphExtensions {
     internal static long?[]
     ShowShortestPaths(this Graph graph,
                       int source,
-                      Func<IPrimHeap<int, long>> priorityQueueSupplier,
+                      Func<IPriorityQueue<int, long>> priorityQueueSupplier,
                       string label)
     {
         label = label.ToUpper();
@@ -501,13 +501,15 @@ internal sealed class Controller {
 
 private static void Run(Graph graph, int source)
 {
-    var naive = graph.ShowShortestPaths(source,
-                                        () => new NaivePrimHeap<int, long>(),
-                                        "naive priority queue");
+    var naive =
+        graph.ShowShortestPaths(source,
+                                () => new NaivePriorityQueue<int, long>(),
+                                "naive priority queue");
     
-    var binary = graph.ShowShortestPaths(source,
-                                         () => new BinaryPrimHeap<int, long>(),
-                                         "binary minheap");
+    var binary =
+        graph.ShowShortestPaths(source,
+                                () => new BinaryHeap<int, long>(),
+                                "binary minheap");
     
     naive.SequenceEqual(binary).Dump("Same result?");
 }
