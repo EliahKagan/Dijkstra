@@ -58,11 +58,11 @@ internal interface IPriorityQueue<TKey, TValue> {
 /// A naive priority queue for Prim's and Dijkstra's algorithms.
 /// </summary>
 /// <remarks>O(1) insert/decrease. O(n) extract-min.</remarks>
-internal sealed class NaivePriorityQueue<TKey, TValue>
+internal sealed class UnsortedArrayPriorityQueue<TKey, TValue>
         : IPriorityQueue<TKey, TValue> where TKey : notnull {
-    public NaivePriorityQueue() : this(Comparer<TValue>.Default) { }
+    internal UnsortedArrayPriorityQueue() : this(Comparer<TValue>.Default) { }
 
-    public NaivePriorityQueue(IComparer<TValue> comparer)
+    internal UnsortedArrayPriorityQueue(IComparer<TValue> comparer)
         => _comparer = comparer;
 
     public int Count => _entries.Count;
@@ -97,9 +97,9 @@ internal sealed class NaivePriorityQueue<TKey, TValue>
 /// <remarks>O(log n) insert/decrease. O(log n) extract-min.</remarks>
 internal sealed class BinaryHeap<TKey, TValue> : IPriorityQueue<TKey, TValue>
         where TKey : notnull {
-    public BinaryHeap() : this(Comparer<TValue>.Default) { }
+    internal BinaryHeap() : this(Comparer<TValue>.Default) { }
 
-    public BinaryHeap(IComparer<TValue> comparer)
+    internal BinaryHeap(IComparer<TValue> comparer)
         => _comparer = comparer;
 
     public int Count => _heap.Count;
@@ -605,15 +605,14 @@ internal sealed class Controller {
 
 private static void Run(Graph graph, int source)
 {
-    var naive =
-        graph.ShowShortestPaths(source,
-                                () => new NaivePriorityQueue<int, long>(),
-                                "naive priority queue");
+    var naive = graph.ShowShortestPaths(
+                        source,
+                        () => new UnsortedArrayPriorityQueue<int, long>(),
+                        "naive priority queue");
 
-    var binary =
-        graph.ShowShortestPaths(source,
-                                () => new BinaryHeap<int, long>(),
-                                "binary minheap");
+    var binary = graph.ShowShortestPaths(source,
+                        () => new BinaryHeap<int, long>(),
+                        "binary minheap");
 
     naive.SequenceEqual(binary).Dump("Same result?");
 }
