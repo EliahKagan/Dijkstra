@@ -204,6 +204,110 @@ internal sealed class BinaryHeap<TKey, TValue> : IPriorityQueue<TKey, TValue>
 }
 
 /// <summary>
+/// A Fibonacci minheap providing priority queue operations for Prim's and
+/// Dijkstra's algorithms.
+/// </summary>
+/// <remarks>O(1) insert/decrease. O(log n) extract-min. (Amortized.)</remarks>
+internal sealed class FibonacciHeap<TKey, TValue>
+        : IPriorityQueue<TKey, TValue> {
+    internal FibonacciHeap() : this(Comparer<TValue>.Default) { }
+
+    internal FibonacciHeap(IComparer<TValue> comparer)
+        => _comparer = comparer;
+
+    public int Count { get; private set; } = 0;
+
+    public KeyValuePair<TKey, TValue> ExtractMin()
+    {
+        // FIXME: Factor some parts out into helper methods.
+
+        if (_min == null)
+            throw new InvalidOperationException("Nothing to extract");
+
+        var entry = KeyValuePair.Create(_min.Key, _min.Value);
+        var child = _min.Child;
+
+        if (child != null) {
+            // Tell the children their parent has gone away.
+            do {
+                child.Parent = null;
+                child = child.Next;
+            } while (child != _min.Child);
+
+            // Make the children parents.
+            child.Prev.Next = _min.Next;
+            child.Prev = _min.Prev;
+            _min.Prev.Next = _min.Next.Prev = child;
+
+            // Set the new minimum node, consolidating any remaining nodes.
+            if (_min.Next == _min) {
+                _min = null;
+            } else {
+                _min = _min.Next;
+                Consolidate();
+            }
+        }
+
+        --Count;
+        return entry;
+    }
+
+    private sealed class Node {
+        internal Node(TKey key, TValue value)
+        {
+            Key = key;
+            Value = value;
+            Prev = Next = this;
+        }
+
+        internal Node(TKey key, TValue value, Node prev)
+        {
+            Key = key;
+            Value = value;
+            Prev = prev;
+            Next = prev.Next;
+            Prev.Next = Next.Prev = this;
+        }
+
+        internal TKey Key { get; }
+
+        internal TValue Value { get; set; }
+
+        internal Node? Parent { get; set; } = null;
+
+        internal Node Prev { get; set; }
+
+        internal Node Next { get; set; }
+
+        internal Node? Child { get; set; } = null;
+
+        internal int Degree { get; set; } = 0;
+
+        internal bool Mark { get; set; } = false;
+    }
+
+    private void Insert(TKey key, TValue value)
+    {
+        if (_min == null) {
+            _min = new Node(key, value);
+        } else {
+            var node = new Node(key, value, _min);
+            if (_comparer.Compare(value, _min.Value) < 0) _min = node;
+            ++Count;
+        }
+    }
+
+    private void Consolidate()
+    {
+        // FIXME: implement this
+    }
+
+    private Node? _min = null;
+
+    private readonly IComparer<TValue> _comparer;
+}
+
+/// <summary>
 /// A weighted directed graph represented as an adjacency list.
 /// </summary>
 internal sealed class Graph {
