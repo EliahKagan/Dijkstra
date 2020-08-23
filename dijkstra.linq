@@ -405,8 +405,8 @@ internal static class GraphExtensions {
 /// <summary>UI to accept a graph description and trigger a run.</summary>
 internal sealed class Controller {
     internal Controller() : this(
-        initialOrder: "6",
-        initialEdges: "1 2 17\n3 0 12\n0 5 19\n1 5 8\n4 3 100\n5 4 2\n4 2 60\n1 4 7\n2 1 69",
+        initialOrder: "7",
+        initialEdges: "0 1 10\n0 6 15\n1 2 15\n2 3 12\n6 4 30\n0 2 9\n3 4 16\n4 5 9\n5 0 17\n0 2 8\n1 3 21\n5 6 94\n2 4 14\n3 5 13\n6 4 50\n4 0 20\n5 1 7\n6 3 68\n5 5 1\n",
         initialSource: "0")
     {
     }
