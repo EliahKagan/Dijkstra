@@ -1,6 +1,5 @@
 <Query Kind="Program">
   <Namespace>LINQPad.Controls</Namespace>
-  <Namespace>System.Threading.Tasks</Namespace>
 </Query>
 
 /// <summary>LINQ-style extension methods.</summary>
@@ -229,7 +228,7 @@ internal sealed class FibonacciHeap<TKey, TValue>
 
         if (child != null) {
             // Tell the children their parent has gone away.
-            do {
+            do { // for each child
                 child.Parent = null;
                 child = child.Next;
             } while (child != _min.Child);
@@ -286,6 +285,11 @@ internal sealed class FibonacciHeap<TKey, TValue>
         internal bool Mark { get; set; } = false;
     }
 
+    private static readonly double GoldenRatio = (1.0 + Math.Sqrt(5.0)) / 2.0;
+
+    /// <summary>The maximum degree is no more than this.</summary>
+    private int DegreeCeiling => (int)Math.Log(a: Count, newBase: GoldenRatio);
+
     private void Insert(TKey key, TValue value)
     {
         if (_min == null) {
@@ -299,7 +303,43 @@ internal sealed class FibonacciHeap<TKey, TValue>
 
     private void Consolidate()
     {
-        // FIXME: implement this
+        var by_degree = new Node?[DegreeCeiling + 1];
+
+        foreach (var root in GetRoots()) {
+            // TODO: Decide if "parent" and "child" are the best names.
+            // FIXME: Refactor the loop so it's more elegant and less confusing.
+            var parent = root;
+            var degree = parent.Degree;
+            for (Node? child; (child = by_degree[degree]) != null; by_degree[degree++] = null) {
+                if (_comparer.Compare(child.Value, parent.Value) < 0)
+                    (parent, child) = (child, parent);
+                Link(parent, child)
+            }
+            by_degree[degree] = parent;
+        }
+
+        // FIXME: Implement the rest, which rebuilds the linked list of roots.
+    }
+
+    /// <summary>Returns an eagerly built list of roots.</summary>
+    /// <remarks>Eager, so callers can remove roots while iterating.</remarks>
+    private IList<Node> GetRoots()
+    {
+        var roots = new List<Node>();
+        if (_min == null) return roots;
+
+        var root = _min;
+        do {
+            roots.Add(root);
+            root = root.Next;
+        } while (root != _min);
+
+        return roots;
+    }
+
+    private void Link(Node parent, Node child)
+    {
+        // FIXME: implement this!
     }
 
     private Node? _min = null;
