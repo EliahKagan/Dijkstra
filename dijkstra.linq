@@ -305,6 +305,10 @@ internal sealed class FibonacciHeap<TKey, TValue>
 
     private void Consolidate()
     {
+        // TODO: When a root is made a child, remove it from the linked list of
+        // roots immediately, rather than rebuilding the linked list in a
+        // separate pass.
+
         var by_degree = new Node?[DegreeCeiling + 1];
 
         // Link trees together so no two roots have the same degree.
