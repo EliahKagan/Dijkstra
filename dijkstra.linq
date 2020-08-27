@@ -216,6 +216,20 @@ internal sealed class FibonacciHeap<TKey, TValue>
 
     public int Count => _map.Count;
 
+    public bool InsertOrDecrease(TKey key, TValue value)
+    {
+        if (!_map.TryGetValue(key, out var node)) {
+            Insert(key, value);
+        } else if (LessThan(value, node.Value)) {
+            node.Value = value;
+            Decrease(node);
+        } else {
+            return false;
+        }
+
+        return true;
+    }
+
     public KeyValuePair<TKey, TValue> ExtractMin()
     {
         // FIXME: Factor some parts out into helper methods.
@@ -297,7 +311,7 @@ internal sealed class FibonacciHeap<TKey, TValue>
             _min = new Node(key, value);
         } else {
             node.ConnectAfter(_min);
-            if (LessThan(node, _min)) _min = node;
+            if (LessThan(value, _min.Value)) _min = node;
         }
 
         _map.Add(key, node);
@@ -320,7 +334,7 @@ internal sealed class FibonacciHeap<TKey, TValue>
                 var child = by_degree[degree];
                 if (child == null) break;
 
-                if (LessThan(child, parent))
+                if (LessThan(child.Value, parent.Value))
                     (parent, child) = (child, parent);
 
                 Link(parent, child);
@@ -339,7 +353,7 @@ internal sealed class FibonacciHeap<TKey, TValue>
                 _min = root;
             } else {
                 root.ConnectAfter(_min);
-                if (LessThan(root, _min)) _min = root;
+                if (LessThan(root.Value, _min.Value)) _min = root;
             }
         }
     }
@@ -367,6 +381,7 @@ internal sealed class FibonacciHeap<TKey, TValue>
         child.Mark = false;
 
         if (parent.Child == null) {
+            // FIXME: Does this break a linked list of siblings?
             child.Disconnect();
             parent.Child = child;
         } else {
@@ -376,8 +391,23 @@ internal sealed class FibonacciHeap<TKey, TValue>
         ++parent.Degree;
     }
 
-    private bool LessThan(Node lhs, Node rhs)
-        => _comparer.Compare(lhs.Value, rhs.Value) < 0;
+    private void Decrease(Node child)
+    {
+        // FIXME: implement this
+    }
+
+    private void Cut(Node parent, Node child)
+    {
+        // FIXME: implement this
+    }
+
+    private void CascadingCut(Node node)
+    {
+        // FIXME: implement this
+    }
+
+    private bool LessThan(TValue lhs, TValue rhs)
+        => _comparer.Compare(lhs, rhs) < 0;
 
     private Node? _min = null;
 
