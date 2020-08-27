@@ -287,16 +287,25 @@ internal static class GraphExtensions {
     private static bool DebugEdgeSelection => false;
     private static bool DebugDot => false;
 
-    internal static long?[]
-    ShowShortestPaths(this Graph graph,
-                      int source,
-                      Func<IPriorityQueue<int, long>> priorityQueueSupplier,
-                      string label)
-    {
-        label = label.ToUpper();
+    private static readonly
+    IReadOnlyDictionary<string, Func<IPriorityQueue<int, long>>>
+    PriorityQueueSuppliers
+            = new Dictionary<string, Func<IPriorityQueue<int, long>>> {
+        {
+            "unsorted array", () => new UnsortedArrayPriorityQueue<int, long>()
+        },
+        {
+            "binary heap", () => new BinaryHeap<int, long>()
+        }
+    };
 
-        var parents = graph.ComputeShortestPaths(source,
-                                                 priorityQueueSupplier);
+    internal static long?[]
+    ShowShortestPaths(this Graph graph, int source, string pq)
+    {
+        var label = pq.ToUpper();
+
+        var parents =
+            graph.ComputeShortestPaths(source, PriorityQueueSuppliers[pq]);
         if (DebugParents) parents.Dump($"Parents via {label}");
 
         var edgeSelection =
@@ -423,8 +432,10 @@ internal sealed class Controller {
         _source = new TextArea(initialSource, columns: 10);
         _source.Rows = 1;
 
-        _buttons = new WrapPanel(new Button("Run", DoRun),
-                                 new Button("Clear", DoClear));
+        _config = CreateConfigCheckBoxes("unsorted array", "binary heap");
+
+        _run = new Button("Run", OnRun);
+        _buttons = new WrapPanel(_run, new Button("Clear", OnClear));
     }
 
     internal void Show()
@@ -432,18 +443,26 @@ internal sealed class Controller {
         _order.Dump("Order");
         _edges.Dump("Edges");
         _source.Dump("Source");
+        _config.Dump("Priority queues");
         _buttons.Dump();
     }
 
-    internal event Action<Graph, int>? Run;
+    internal event Action<Graph, int, string[]>? Run;
 
-    private void DoRun(Button sender)
+    private void OnRun(Button sender)
     {
         // Always build the graph, even if no handler is registered to
         // accept it, so that wrong input will always be reported.
         var graph = BuildGraph();
         var source = int.Parse(_source.Text);
-        Run?.Invoke(graph, source);
+
+        var config = _config.Children
+                            .Cast<CheckBox>()
+                            .Where(cb => cb.Checked)
+                            .Select(cb => cb.Text)
+                            .ToArray();
+
+        Run?.Invoke(graph, source, config);
     }
 
     private Graph BuildGraph()
@@ -474,11 +493,16 @@ internal sealed class Controller {
                                 message: "wrong record length"))
                  .ToArray();
 
-    private void DoClear(Button sender)
+    private void OnClear(Button sender)
     {
         var order = _order.Text;
         var edges = _edges.Text;
         var source = _source.Text;
+
+        var config = _config.Children
+                            .Cast<CheckBox>()
+                            .Select(cb => (cb, cb.Checked))
+                            .ToArray();
 
         Util.ClearResults();
 
@@ -486,7 +510,22 @@ internal sealed class Controller {
         _edges.Text = edges;
         _source.Text = source;
 
+        foreach (var (cb, @checked) in config) cb.Checked = @checked;
+
         Show();
+    }
+
+    private void OnConfig(CheckBox? sender)
+        => _run.Enabled = _config.Children
+                                 .Cast<CheckBox>()
+                                 .Any(cb => cb.Checked);
+
+    private WrapPanel CreateConfigCheckBoxes(params string[] labels)
+    {
+        CheckBox CreateCheckBox(string label)
+            => new CheckBox(label, true, OnConfig);
+
+        return new WrapPanel(Array.ConvertAll(labels, CreateCheckBox));
     }
 
     private readonly TextArea _order;
@@ -495,21 +534,22 @@ internal sealed class Controller {
 
     private readonly TextArea _source;
 
+    private readonly WrapPanel _config;
+
+    private readonly Button _run;
+
     private readonly WrapPanel _buttons;
 }
 
-private static void Run(Graph graph, int source)
+private static void Run(Graph graph, int source, string[] config)
 {
-    var naive = graph.ShowShortestPaths(
-                        source,
-                        () => new UnsortedArrayPriorityQueue<int, long>(),
-                        "naive priority queue");
+    var results =
+        Array.ConvertAll(config, pq => graph.ShowShortestPaths(source, pq));
 
-    var binary = graph.ShowShortestPaths(source,
-                        () => new BinaryHeap<int, long>(),
-                        "binary minheap");
-
-    naive.SequenceEqual(binary).Dump("Same result?");
+    if (results.Length > 1) {
+        results.Skip(1).All(res => results[0].SequenceEqual(res))
+               .Dump("Same results?");
+    }
 }
 
 private static void Main()
