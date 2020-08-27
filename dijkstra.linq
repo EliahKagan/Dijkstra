@@ -208,13 +208,13 @@ internal sealed class BinaryHeap<TKey, TValue> : IPriorityQueue<TKey, TValue>
 /// </summary>
 /// <remarks>O(1) insert/decrease. O(log n) extract-min. (Amortized.)</remarks>
 internal sealed class FibonacciHeap<TKey, TValue>
-        : IPriorityQueue<TKey, TValue> {
+        : IPriorityQueue<TKey, TValue> where TKey : notnull {
     internal FibonacciHeap() : this(Comparer<TValue>.Default) { }
 
     internal FibonacciHeap(IComparer<TValue> comparer)
         => _comparer = comparer;
 
-    public int Count { get; private set; } = 0;
+    public int Count => _map.Count;
 
     public KeyValuePair<TKey, TValue> ExtractMin()
     {
@@ -224,8 +224,8 @@ internal sealed class FibonacciHeap<TKey, TValue>
             throw new InvalidOperationException("Nothing to extract");
 
         var entry = KeyValuePair.Create(_min.Key, _min.Value);
-        var child = _min.Child;
 
+        var child = _min.Child;
         if (child != null) {
             // Tell the children their parent has gone away.
             do { // for each child
@@ -247,24 +247,14 @@ internal sealed class FibonacciHeap<TKey, TValue>
             }
         }
 
-        --Count;
+        _map.Remove(entry.Key);
+        Debug.Assert((_min == null) == (Count == 0));
         return entry;
     }
 
     private sealed class Node {
-#pragma warning disable CS8618
         internal Node(TKey key, TValue value)
-        {
-            (Key, Value) = (key, value);
-            Disconnect();
-        }
-
-        internal Node(TKey key, TValue value, Node prev)
-        {
-            (Key, Value) = (key, value);
-            ConnectAfter(prev);
-        }
-#pragma warning restore CS8618
+            => (Key, Value, Prev, Next) = (key, value, this, this);
 
         internal void Disconnect() => Prev = Next = this;
 
@@ -299,14 +289,18 @@ internal sealed class FibonacciHeap<TKey, TValue>
 
     private void Insert(TKey key, TValue value)
     {
+        Debug.Assert((_min == null) == (Count == 0));
+
+        var node = new Node(key, value);
+
         if (_min == null) {
             _min = new Node(key, value);
         } else {
-            var node = new Node(key, value, _min);
-            if (NeedOrder(node, _min)) _min = node;
+            node.ConnectAfter(_min);
+            if (LessThan(node, _min)) _min = node;
         }
 
-        ++Count;
+        _map.Add(key, node);
     }
 
     private void Consolidate()
@@ -322,7 +316,7 @@ internal sealed class FibonacciHeap<TKey, TValue>
                 var child = by_degree[degree];
                 if (child == null) break;
 
-                if (NeedOrder(child, parent))
+                if (LessThan(child, parent))
                     (parent, child) = (child, parent);
 
                 Link(parent, child);
@@ -341,7 +335,7 @@ internal sealed class FibonacciHeap<TKey, TValue>
                 _min = root;
             } else {
                 root.ConnectAfter(_min);
-                if (NeedOrder(root, _min)) _min = root;
+                if (LessThan(root, _min)) _min = root;
             }
         }
     }
@@ -378,10 +372,13 @@ internal sealed class FibonacciHeap<TKey, TValue>
         ++parent.Degree;
     }
 
-    private bool NeedOrder(Node lhs, Node rhs)
+    private bool LessThan(Node lhs, Node rhs)
         => _comparer.Compare(lhs.Value, rhs.Value) < 0;
 
     private Node? _min = null;
+
+    private readonly IDictionary<TKey, Node> _map =
+        new Dictionary<TKey, Node>();
 
     private readonly IComparer<TValue> _comparer;
 }
