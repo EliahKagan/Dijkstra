@@ -1,6 +1,5 @@
 <Query Kind="Program">
   <Namespace>LINQPad.Controls</Namespace>
-  <Namespace>System.Threading.Tasks</Namespace>
 </Query>
 
 /// <summary>LINQ-style extension methods.</summary>
