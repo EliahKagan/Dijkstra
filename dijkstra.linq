@@ -304,8 +304,9 @@ internal sealed class FibonacciHeap<TKey, TValue>
         } else {
             var node = new Node(key, value, _min);
             if (NeedOrder(node, _min)) _min = node;
-            ++Count;
         }
+
+        ++Count;
     }
 
     private void Consolidate()
