@@ -252,17 +252,24 @@ internal sealed class FibonacciHeap<TKey, TValue>
     }
 
     private sealed class Node {
+#pragma warning disable CS8618
         internal Node(TKey key, TValue value)
         {
-            Key = key;
-            Value = value;
-            Prev = Next = this;
+            (Key, Value) = (key, value);
+            Disconnect();
         }
 
         internal Node(TKey key, TValue value, Node prev)
         {
-            Key = key;
-            Value = value;
+            (Key, Value) = (key, value);
+            ConnectAfter(prev);
+        }
+#pragma warning restore CS8618
+
+        internal void Disconnect() => Prev = Next = this;
+
+        internal void ConnectAfter(Node prev)
+        {
             Prev = prev;
             Next = prev.Next;
             Prev.Next = Next.Prev = this;
@@ -296,7 +303,7 @@ internal sealed class FibonacciHeap<TKey, TValue>
             _min = new Node(key, value);
         } else {
             var node = new Node(key, value, _min);
-            if (_comparer.Compare(value, _min.Value) < 0) _min = node;
+            if (NeedOrder(node, _min)) _min = node;
             ++Count;
         }
     }
@@ -305,20 +312,37 @@ internal sealed class FibonacciHeap<TKey, TValue>
     {
         var by_degree = new Node?[DegreeCeiling + 1];
 
+        // Link trees together so no two roots have the same degree.
         foreach (var root in GetRoots()) {
-            // TODO: Decide if "parent" and "child" are the best names.
-            // FIXME: Refactor the loop so it's more elegant and less confusing.
             var parent = root;
             var degree = parent.Degree;
-            for (Node? child; (child = by_degree[degree]) != null; by_degree[degree++] = null) {
-                if (_comparer.Compare(child.Value, parent.Value) < 0)
+
+            for (; ; ) {
+                var child = by_degree[degree];
+                if (child == null) break;
+
+                if (NeedOrder(child, parent))
                     (parent, child) = (child, parent);
-                Link(parent, child)
+
+                Link(parent, child);
             }
+
             by_degree[degree] = parent;
         }
 
-        // FIXME: Implement the rest, which rebuilds the linked list of roots.
+        // Rebuild the linked list of roots.
+        _min = null;
+        foreach (var root in by_degree) {
+            if (root == null) continue;
+
+            if (_min == null) {
+                root.Disconnect();
+                _min = root;
+            } else {
+                root.ConnectAfter(_min);
+                if (NeedOrder(root, _min)) _min = root;
+            }
+        }
     }
 
     /// <summary>Returns an eagerly built list of roots.</summary>
@@ -339,8 +363,22 @@ internal sealed class FibonacciHeap<TKey, TValue>
 
     private void Link(Node parent, Node child)
     {
-        // FIXME: implement this!
+        child.Prev.Next = child.Next;
+        child.Next.Prev = child.Prev;
+        child.Mark = false;
+
+        if (parent.Child == null) {
+            child.Disconnect();
+            parent.Child = child;
+        } else {
+            child.ConnectAfter(parent.Child);
+        }
+
+        ++parent.Degree;
     }
+
+    private bool NeedOrder(Node lhs, Node rhs)
+        => _comparer.Compare(lhs.Value, rhs.Value) < 0;
 
     private Node? _min = null;
 
