@@ -32,6 +32,39 @@ internal static class EnumerableExtensions {
     }
 }
 
+/// <summary></summary>
+internal static class TypeExtensions {
+    internal static string GetInformalName(this Type type)
+    {
+        var name = type.Name;
+        var end = name.IndexOf('`');
+        if (end != -1) name = name[0..end];
+        
+        return string.Join(" ", GetLowerCamelWords(name));
+    }
+
+    internal static Func<T> CreateSupplier<T>(this Type type) where T : notnull
+        => () => type.CreateAsNonnull<T>();
+    
+    private static IEnumerable<string> GetLowerCamelWords(string name)
+        => camelParser.Matches(name).Select(match => match.Value.ToLower());
+
+    private static T CreateAsNonnull<T>(this Type type) where T : notnull
+    {
+        var instance = Activator.CreateInstance(type);
+        
+        if (instance == null) {
+            throw new NotSupportedException(
+                    "Bug: non-nullable type instantiated null");
+        }
+        
+        return (T)instance;
+    }
+    
+    private static readonly Regex camelParser =
+        new Regex(@"(?:^.|\P{Lu})[^\P{Lu}]*");
+}
+
 /// <summary>
 /// Priority queue operations for Prim's and Dijkstra's algorithms.
 /// </summary>
@@ -287,25 +320,14 @@ internal static class GraphExtensions {
     private static bool DebugEdgeSelection => false;
     private static bool DebugDot => false;
 
-    private static readonly
-    IReadOnlyDictionary<string, Func<IPriorityQueue<int, long>>>
-    PriorityQueueSuppliers
-            = new Dictionary<string, Func<IPriorityQueue<int, long>>> {
-        {
-            "unsorted array", () => new UnsortedArrayPriorityQueue<int, long>()
-        },
-        {
-            "binary heap", () => new BinaryHeap<int, long>()
-        }
-    };
-
     internal static long?[]
     ShowShortestPaths(this Graph graph, int source, string pq)
     {
         var label = pq.ToUpper();
 
-        var parents =
-            graph.ComputeShortestPaths(source, PriorityQueueSuppliers[pq]);
+        var parents = graph.ComputeShortestPaths(
+                                source,
+                                PriorityQueue<int, long>.GetSupplier(pq));
         if (DebugParents) parents.Dump($"Parents via {label}");
 
         var edgeSelection =
@@ -412,17 +434,19 @@ internal static class GraphExtensions {
 
 /// <summary>UI to accept a graph description and trigger a run.</summary>
 internal sealed class Controller {
-    internal Controller() : this(
+    internal Controller(params Type[] priorityQueues) : this(
         initialOrder: "7",
         initialEdges: "0 1 10\n0 6 15\n1 2 15\n2 3 12\n6 4 30\n0 2 9\n3 4 16\n4 5 9\n5 0 17\n0 2 8\n1 3 21\n5 6 94\n2 4 14\n3 5 13\n6 4 50\n4 0 20\n5 1 7\n6 3 68\n5 5 1\n",
-        initialSource: "0")
+        initialSource: "0",
+        priorityQueues)
     {
     }
 
     internal Controller(string initialOrder,
                         string initialEdges,
-                        string initialSource)
-    {
+                        string initialSource,
+                        params Type[] priorityQueues)
+    {    
         _order = new TextArea(initialOrder, columns: 10);
         _order.Rows = 1;
 
@@ -431,8 +455,8 @@ internal sealed class Controller {
 
         _source = new TextArea(initialSource, columns: 10);
         _source.Rows = 1;
-
-        _config = CreateConfigCheckBoxes("unsorted array", "binary heap");
+        
+        PopulateConfig(priorityQueues);
 
         _run = new Button("Run", OnRun);
         _buttons = new WrapPanel(_run, new Button("Clear", OnClear));
@@ -443,11 +467,12 @@ internal sealed class Controller {
         _order.Dump("Order");
         _edges.Dump("Edges");
         _source.Dump("Source");
-        _config.Dump("Priority queues");
+        _pqConfig.Dump("Priority queues");
         _buttons.Dump();
     }
 
-    internal event Action<Graph, int, string[]>? Run;
+    internal event Action<Graph, int, Func<IPriorityQueue<int, long>>, string>?
+    Run;
 
     private void OnRun(Button sender)
     {
@@ -455,14 +480,17 @@ internal sealed class Controller {
         // accept it, so that wrong input will always be reported.
         var graph = BuildGraph();
         var source = int.Parse(_source.Text);
-
-        var config = _config.Children
-                            .Cast<CheckBox>()
-                            .Where(cb => cb.Checked)
-                            .Select(cb => cb.Text)
-                            .ToArray();
-
-        Run?.Invoke(graph, source, config);
+        
+        var run = Run; // Don't respond to handler changes while running.
+        if (run == null) return;
+        
+        _pqConfig.Children
+                 .Cast<CheckBox>()
+                 .Where(cb => cb.Checked)
+                 .Select(cb => cb.Text)
+                 .Select(text => (supplier: _pqSuppliers[text], label: text))
+                 .ToList() // Don't respond to config changes while running.
+                 .ForEach(row => run(graph, source, row.supplier, row.label));
     }
 
     private Graph BuildGraph()
@@ -499,10 +527,10 @@ internal sealed class Controller {
         var edges = _edges.Text;
         var source = _source.Text;
 
-        var config = _config.Children
-                            .Cast<CheckBox>()
-                            .Select(cb => (cb, cb.Checked))
-                            .ToArray();
+        var config = _pqConfig.Children
+                              .Cast<CheckBox>()
+                              .Select(cb => (cb, cb.Checked))
+                              .ToArray();
 
         Util.ClearResults();
 
@@ -516,16 +544,24 @@ internal sealed class Controller {
     }
 
     private void OnConfig(CheckBox? sender)
-        => _run.Enabled = _config.Children
-                                 .Cast<CheckBox>()
-                                 .Any(cb => cb.Checked);
+        => _run.Enabled = _pqConfig.Children
+                                   .Cast<CheckBox>()
+                                   .Any(cb => cb.Checked);
 
-    private WrapPanel CreateConfigCheckBoxes(params string[] labels)
+    void PopulateConfig(Type[] priorityQueues)
     {
-        CheckBox CreateCheckBox(string label)
-            => new CheckBox(label, true, OnConfig);
-
-        return new WrapPanel(Array.ConvertAll(labels, CreateCheckBox));
+        if (priorityQueues.Length == 0) {
+            throw new ArgumentException(
+                    paramName: nameof(priorityQueues),
+                    message: "must pass at least one priority queue type");
+        }
+        foreach (var type in priorityQueues) {
+            var label = type.GetInformalName();
+            var boundType = type.MakeGenericType(typeof(int), typeof(long));
+            var supplier = boundType.CreateSupplier<IPriorityQueue<int, long>>();
+            _pqSuppliers.Add(label, supplier);
+            _pqConfig.Children.Add(new CheckBox(label, true, OnConfig));
+        }
     }
 
     private readonly TextArea _order;
@@ -533,8 +569,11 @@ internal sealed class Controller {
     private readonly TextArea _edges;
 
     private readonly TextArea _source;
+    
+    private readonly IDictionary<string, Func<IPriorityQueue<int, long>>>
+    _pqSuppliers = new Dictionary<string, Func<IPriorityQueue<int, long>>>();
 
-    private readonly WrapPanel _config;
+    private readonly WrapPanel _pqConfig = new WrapPanel();
 
     private readonly Button _run;
 
@@ -543,8 +582,9 @@ internal sealed class Controller {
 
 private static void Run(Graph graph, int source, string[] config)
 {
-    var results =
-        Array.ConvertAll(config, pq => graph.ShowShortestPaths(source, pq));
+    long?[] RunOne(string pq) => graph.ShowShortestPaths(source, pq);
+    
+    var results = Array.ConvertAll(config, RunOne);
 
     if (results.Length > 1) {
         results.Skip(1).All(res => results[0].SequenceEqual(res))
@@ -557,4 +597,7 @@ private static void Main()
     var controller = new Controller();
     controller.Run += Run;
     controller.Show();
+    
+    var t = typeof(BinaryHeap<,>);
+    t.Dump();
 }
