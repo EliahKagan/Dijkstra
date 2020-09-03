@@ -39,30 +39,30 @@ internal static class TypeExtensions {
         var name = type.Name;
         var end = name.IndexOf('`');
         if (end != -1) name = name[0..end];
-        
+
         return string.Join(" ", GetLowerCamelWords(name));
     }
 
     internal static Func<T> CreateSupplier<T>(this Type type) where T : notnull
         => () => type.CreateAsNonnull<T>();
-    
+
     private static IEnumerable<string> GetLowerCamelWords(string name)
         => camelParser.Matches(name).Select(match => match.Value.ToLower());
 
     private static T CreateAsNonnull<T>(this Type type) where T : notnull
     {
-        var instance = Activator.CreateInstance(type);
-        
+        var instance = Activator.CreateInstance(type, nonPublic: true);
+
         if (instance == null) {
             throw new NotSupportedException(
                     "Bug: non-nullable type instantiated null");
         }
-        
+
         return (T)instance;
     }
-    
+
     private static readonly Regex camelParser =
-        new Regex(@"(?:^.|\P{Lu})[^\P{Lu}]*");
+        new Regex(@"(?:^.|\p{Lu})\P{Lu}*");
 }
 
 /// <summary>
@@ -321,13 +321,9 @@ internal static class GraphExtensions {
     private static bool DebugDot => false;
 
     internal static long?[]
-    ShowShortestPaths(this Graph graph, int source, string pq)
+    ShowShortestPaths(this Graph graph, int source, Func<IPriorityQueue<int, long>> pqSupplier, string label)
     {
-        var label = pq.ToUpper();
-
-        var parents = graph.ComputeShortestPaths(
-                                source,
-                                PriorityQueue<int, long>.GetSupplier(pq));
+        var parents = graph.ComputeShortestPaths(source, pqSupplier);
         if (DebugParents) parents.Dump($"Parents via {label}");
 
         var edgeSelection =
@@ -446,7 +442,7 @@ internal sealed class Controller {
                         string initialEdges,
                         string initialSource,
                         params Type[] priorityQueues)
-    {    
+    {
         _order = new TextArea(initialOrder, columns: 10);
         _order.Rows = 1;
 
@@ -455,7 +451,7 @@ internal sealed class Controller {
 
         _source = new TextArea(initialSource, columns: 10);
         _source.Rows = 1;
-        
+
         PopulateConfig(priorityQueues);
 
         _run = new Button("Run", OnRun);
@@ -480,10 +476,10 @@ internal sealed class Controller {
         // accept it, so that wrong input will always be reported.
         var graph = BuildGraph();
         var source = int.Parse(_source.Text);
-        
+
         var run = Run; // Don't respond to handler changes while running.
         if (run == null) return;
-        
+
         _pqConfig.Children
                  .Cast<CheckBox>()
                  .Where(cb => cb.Checked)
@@ -555,6 +551,7 @@ internal sealed class Controller {
                     paramName: nameof(priorityQueues),
                     message: "must pass at least one priority queue type");
         }
+
         foreach (var type in priorityQueues) {
             var label = type.GetInformalName();
             var boundType = type.MakeGenericType(typeof(int), typeof(long));
@@ -569,7 +566,7 @@ internal sealed class Controller {
     private readonly TextArea _edges;
 
     private readonly TextArea _source;
-    
+
     private readonly IDictionary<string, Func<IPriorityQueue<int, long>>>
     _pqSuppliers = new Dictionary<string, Func<IPriorityQueue<int, long>>>();
 
@@ -580,24 +577,20 @@ internal sealed class Controller {
     private readonly WrapPanel _buttons;
 }
 
-private static void Run(Graph graph, int source, string[] config)
+private static void Main()
 {
-    long?[] RunOne(string pq) => graph.ShowShortestPaths(source, pq);
-    
-    var results = Array.ConvertAll(config, RunOne);
+    var controller = new Controller(typeof(UnsortedArrayPriorityQueue<,>),
+                                    typeof(BinaryHeap<,>));
 
-    if (results.Length > 1) {
+    var results = new List<long?[]>();
+
+    controller.Run += (graph, source, supplier, label) =>
+        results.Add(graph.ShowShortestPaths(source, supplier, label));
+
+    controller.Show();
+
+    if (results.Count > 1) {
         results.Skip(1).All(res => results[0].SequenceEqual(res))
                .Dump("Same results?");
     }
-}
-
-private static void Main()
-{
-    var controller = new Controller();
-    controller.Run += Run;
-    controller.Show();
-    
-    var t = typeof(BinaryHeap<,>);
-    t.Dump();
 }
