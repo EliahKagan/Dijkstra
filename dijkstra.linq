@@ -32,7 +32,7 @@ internal static class EnumerableExtensions {
     }
 }
 
-/// <summary></summary>
+/// <summary>Convenience functionality for using reflection.</summary>
 internal static class TypeExtensions {
     internal static string GetInformalName(this Type type)
     {
@@ -131,8 +131,7 @@ internal sealed class BinaryHeap<TKey, TValue> : IPriorityQueue<TKey, TValue>
         where TKey : notnull {
     internal BinaryHeap() : this(Comparer<TValue>.Default) { }
 
-    internal BinaryHeap(IComparer<TValue> comparer)
-        => _comparer = comparer;
+    internal BinaryHeap(IComparer<TValue> comparer) => _comparer = comparer;
 
     public int Count => _heap.Count;
 
@@ -231,8 +230,7 @@ internal sealed class BinaryHeap<TKey, TValue> : IPriorityQueue<TKey, TValue>
     private readonly IList<KeyValuePair<TKey, TValue>> _heap =
         new List<KeyValuePair<TKey, TValue>>();
 
-    private readonly IDictionary<TKey, int> _map =
-        new Dictionary<TKey, int>();
+    private readonly IDictionary<TKey, int> _map = new Dictionary<TKey, int>();
 }
 
 /// <summary>
@@ -321,7 +319,10 @@ internal static class GraphExtensions {
     private static bool DebugDot => false;
 
     internal static long?[]
-    ShowShortestPaths(this Graph graph, int source, Func<IPriorityQueue<int, long>> pqSupplier, string label)
+    ShowShortestPaths(this Graph graph,
+                      int source,
+                      Func<IPriorityQueue<int, long>> pqSupplier,
+                      string label)
     {
         var parents = graph.ComputeShortestPaths(source, pqSupplier);
         if (DebugParents) parents.Dump($"Parents via {label}");
@@ -555,7 +556,9 @@ internal sealed class Controller {
         foreach (var type in priorityQueues) {
             var label = type.GetInformalName();
             var boundType = type.MakeGenericType(typeof(int), typeof(long));
-            var supplier = boundType.CreateSupplier<IPriorityQueue<int, long>>();
+            var supplier =
+                boundType.CreateSupplier<IPriorityQueue<int, long>>();
+
             _pqSuppliers.Add(label, supplier);
             _pqConfig.Children.Add(new CheckBox(label, true, OnConfig));
         }
