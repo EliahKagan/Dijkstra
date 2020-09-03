@@ -233,6 +233,54 @@ internal sealed class BinaryHeap<TKey, TValue> : IPriorityQueue<TKey, TValue>
     private readonly IDictionary<TKey, int> _map = new Dictionary<TKey, int>();
 }
 
+/// <summary>An edge in a weighted directed graph.</summary>
+internal readonly struct Edge {
+    internal Edge(int src, int dest, int weight)
+        => (Src, Dest, Weight) = (src, dest, weight);
+
+    internal int Src { get; }
+
+    internal int Dest { get; }
+
+    internal int Weight { get; }
+}
+
+/// <summary>A marked edge in a weighted directed graph.</summary>
+internal readonly struct MarkedEdge<T> {
+    internal MarkedEdge(int src, int dest, int weight, T mark)
+        => (Src, Dest, Weight, Mark) = (src, dest, weight, mark);
+
+    internal MarkedEdge(Edge edge, T mark)
+        : this(edge.Src, edge.Dest, edge.Weight, mark) { }
+
+    internal int Src { get; }
+
+    internal int Dest { get; }
+
+    internal int Weight { get; }
+
+    internal T Mark { get; }
+}
+
+/// <summary>An immutable list of edges with boolean markings.</summary>
+internal sealed class EdgeSelection : IReadOnlyList<MarkedEdge<bool>> {
+    internal EdgeSelection(int order, IEnumerable<MarkedEdge<bool>> edges)
+        => (Order, _edges) = (order, edges.ToList());
+
+    public MarkedEdge<bool> this[int index] => _edges[index];
+
+    public int Count => _edges.Count;
+
+    public IEnumerator<MarkedEdge<bool>> GetEnumerator()
+        => _edges.GetEnumerator();
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+    internal int Order { get; }
+
+    private readonly IReadOnlyList<MarkedEdge<bool>> _edges;
+}
+
 /// <summary>
 /// A weighted directed graph represented as an adjacency list.
 /// </summary>
@@ -268,14 +316,13 @@ internal sealed class Graph {
     }
 
     internal long?[]
-    ComputeShortestPaths(int start,
-                         Func<IPriorityQueue<int, long>> priorityQueueSupplier)
+    ComputeShortestPaths(int start, Func<IPriorityQueue<int, long>> pqSupplier)
     {
         CheckVertex(nameof(start), start);
 
         var parents = new long?[Order];
         var done = new BitArray(Order);
-        var heap = priorityQueueSupplier();
+        var heap = pqSupplier();
 
         for (heap.InsertOrDecrease(start, 0L); heap.Count != 0; ) {
             var (src, cost) = heap.ExtractMin();
@@ -290,14 +337,52 @@ internal sealed class Graph {
         return parents;
     }
 
-    internal IEnumerable<(int src, int dest, int weight)> Edges
+    private IEnumerable<Edge> Edges
     {
         get {
             foreach (var src in Enumerable.Range(0, Order)) {
                 foreach (var (dest, weight) in _adj[src])
-                    yield return (src, dest, weight);
+                    yield return new Edge(src, dest, weight);
             }
         }
+    }
+
+    private IReadOnlyDictionary<(int src, int dest), IReadOnlyList<Edge>>
+    GroupParallelEdges()
+    {
+        var parallels = new Dictionary<(int src, int dest),
+                                       IReadOnlyList<Edge>>();
+
+        foreach (var group in Edges.GroupBy(edge => (edge.Src, edge.Dest)))
+            parallels.Add(group.Key, group.ToList());
+
+        return parallels;
+    }
+
+    private EdgeSelection
+    SelectEdges(Func<(int src, int dest), bool> predicate)
+    {
+        var parallels = GroupParallelEdges();
+
+        IEnumerable<MarkedEdge<bool>> Emit()
+        {
+            foreach (var (endpoints, group) in parallels) {
+                if (predicate(endpoints)) {
+                    var indices = Enumerable.Range(0, group.Count);
+                    var bestIndex = indices.MinBy(i => group[i].Weight);
+
+                    foreach (var index in indices) {
+                        yield return new MarkedEdge<bool>(group[index],
+                                                          index == bestIndex);
+                    }
+                } else {
+                    foreach (var edge in group)
+                        yield return new MarkedEdge<bool>(edge, false);
+                }
+            }
+        }
+
+        return new EdgeSelection(Order, Emit());
     }
 
     private void CheckVertex(string paramName, int vertex)
@@ -342,37 +427,8 @@ internal static class GraphExtensions {
         return parents;
     }
 
-    private static IEnumerable<(int src, int dest, int weight, bool marked)>
-    EmitEdgeSelection(IEnumerable<(int src, int dest, int weight)> edges,
-                      Func<(int src, int dest), bool> predicate)
-    {
-        var parallels = new Dictionary<(int src, int dest),
-                                       (int src, int dest, int weight)[]>(
-                edges.GroupBy(edge => (edge.src, edge.dest))
-                     .Select(group => KeyValuePair.Create(group.Key,
-                                                          group.ToArray())));
-
-        foreach (var (endpoints, parallelEdges) in parallels) {
-            if (predicate(endpoints)) {
-                var indices = Enumerable.Range(0, parallelEdges.Length);
-                var best = indices.MinBy(i => parallelEdges[i].weight);
-
-                foreach (var i in indices) {
-                    var (src, dest, weight) = parallelEdges[i];
-                    yield return (src, dest, weight, i == best);
-                }
-            } else {
-                foreach (var (src, dest, weight) in parallelEdges)
-                    yield return (src, dest, weight, false);
-            }
-        }
-    }
-
     private static string
-    ToDot(this IEnumerable<(int src, int dest, int weight, bool marked)>
-                edgeSelection,
-          int order,
-          string description)
+    ToDot(this EdgeSelection selection, int order, string description)
     {
         const int indent = 4;
         var margin = new string(' ', indent);
@@ -386,10 +442,10 @@ internal static class GraphExtensions {
         builder.AppendLine();
 
         // Emit the edges in the order given, colorized according to selection.
-        foreach (var (src, dest, weight, marked) in edgeSelection) {
-            var edge = $"{src} -> {dest}";
-            var color = $"color=\"{(marked ? "red" : "gray")}\"";
-            var label = $"label=\"{weight}\"";
+        foreach (var edge in selection) {
+            var endpoints = $"{edge.Src} -> {edge.Dest}";
+            var color = $"color=\"{(edge.Mark ? "red" : "gray")}\"";
+            var label = $"label=\"{edge.Weight}\"";
             builder.AppendLine($"{margin}{edge} [{color} {label}]");
         }
 
