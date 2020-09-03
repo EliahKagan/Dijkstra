@@ -584,8 +584,11 @@ private static void Main()
 
     var results = new List<long?[]>();
 
-    controller.Run += (graph, source, supplier, label) =>
-        results.Add(graph.ShowShortestPaths(source, supplier, label));
+    controller.Run += (graph, source, supplier, label) => {
+        results.Add(graph.ShowShortestPaths(source,
+                                            supplier,
+                                            label.ToUpper()));
+    };
 
     controller.Show();
 
