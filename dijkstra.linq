@@ -263,7 +263,7 @@ internal readonly struct MarkedEdge<T> {
     internal int Weight => _edge.Weight;
 
     internal T Mark { get; }
-    
+
     private object ToDump() => new { Src, Dest, Weight, Mark };
 
     private readonly Edge _edge;
@@ -334,7 +334,7 @@ internal sealed class Graph {
             }
         }
     }
-    
+
     internal EdgeSelection
     SelectEdges(Func<(int src, int dest), bool> predicate)
     {
@@ -392,47 +392,50 @@ internal sealed class ParentsTree : IEquatable<ParentsTree>,
     /// <remarks>Does not range-check or cycle-check the parents.</remarks>
     internal ParentsTree(Graph graph, IReadOnlyList<int?> parents)
         => (Supergraph, _parents) = (graph, parents);
-    
+
     internal Graph Supergraph { get; }
-    
+
     internal int Order => _parents.Count;
-    
+
     public bool Equals(ParentsTree? other)
         => other != null
             && Supergraph == other.Supergraph
             && _parents.SequenceEqual(other._parents);
-    
+
     public override bool Equals(object? other)
         => Equals(other as ParentsTree);
-    
+
     public override int GetHashCode()
     {
         const int seed = 17;
         const int multiplier = 8191;
-        
+
         var code = seed;
-        
+
         unchecked {
             code = code * multiplier + Supergraph.GetHashCode();
-            
+
             foreach (var parent in _parents)
                 code = code * multiplier + parent.GetHashCode();
         }
-        
+
         return code;
     }
-    
+
     public int? this[int child] => _parents[child];
-    
+
     int IReadOnlyCollection<int?>.Count => Order;
-    
+
     public IEnumerator<int?> GetEnumerator() => _parents.GetEnumerator();
-    
+
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-    
+
     internal EdgeSelection ToEdgeSelection()
         => Supergraph.SelectEdges(edge => _parents[edge.dest] == edge.src);
-    
+
+    private object ToDump() => _parents.Select((Parent, Child)
+        => new { Child, Parent });
+
     private readonly IReadOnlyList<int?> _parents;
 }
 
@@ -451,7 +454,7 @@ internal sealed class EdgeSelection : IReadOnlyList<MarkedEdge<bool>> {
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
     internal int Order { get; }
-    
+
     internal DotCode ToDotCode(string description)
     {
         const int indent = 4;
@@ -470,11 +473,11 @@ internal sealed class EdgeSelection : IReadOnlyList<MarkedEdge<bool>> {
             var endpoints = $"{edge.Src} -> {edge.Dest}";
             var color = $"color=\"{(edge.Mark ? "red" : "gray")}\"";
             var label = $"label=\"{edge.Weight}\"";
-            builder.AppendLine($"{margin}{edge} [{color} {label}]");
+            builder.AppendLine($"{margin}{endpoints} [{color} {label}]");
         }
-        
+
         builder.AppendLine("}");
-        
+
         return new DotCode(builder.ToString());
     }
 
@@ -487,9 +490,9 @@ internal sealed class EdgeSelection : IReadOnlyList<MarkedEdge<bool>> {
 /// </remarks>
 internal sealed class DotCode {
     internal DotCode(string code) => Code = code;
-    
+
     internal string Code { get; }
-    
+
     /// <summary>Runs <c>dot</c> to create a temporary SVG file.</summary>
     internal object ToSvg()
     {
@@ -522,8 +525,8 @@ internal sealed class DotCode {
 
         return Util.Image(svgPath);
     }
-    
-    private object ToDump() => new TextArea(Code, 64);
+
+    private object ToDump() => new TextArea(Code, 40);
 }
 
 /// <summary>UI to accept a graph description and trigger a run.</summary>
@@ -567,7 +570,7 @@ internal sealed class Controller {
 
     internal event Action<Graph, int, Func<IPriorityQueue<int, long>>, string>?
     SingleRun;
-    
+
     internal event Action? RunsCompleted;
 
     private void OnRun(Button sender)
@@ -591,7 +594,7 @@ internal sealed class Controller {
                                                    source,
                                                    row.supplier,
                                                    row.label));
-        
+
         runsCompleted?.Invoke();
     }
 
@@ -697,10 +700,10 @@ private static string BuildDumpLabel(string description,
     var margin = new string(' ', indent);
 
     var builder = new StringBuilder($"{description} via:");
-    
+
     foreach (var label in pqLabels)
         builder.AppendLine().Append(margin).Append(label.ToUpper());
-    
+
     return builder.ToString();
 }
 
@@ -710,12 +713,12 @@ private static void Main()
                                     typeof(BinaryHeap<,>));
 
     var results = new List<(string label, ParentsTree parents)>();
-    
+
     controller.SingleRun += (graph, source, supplier, label) => {
         var parents = graph.ComputeShortestPaths(source, supplier);
         results.Add((label, parents));
     };
-    
+
     controller.RunsCompleted += () => {
         var groups =
             (from result in results
@@ -723,7 +726,7 @@ private static void Main()
              select (parents: grp.Key, labels: grp.ToList()))
              //select new { Parents = grp.Key, Labels = grp.ToList() })
                 .ToList();
-        
+
         (groups.Count switch {
             0 => "No results at all. BUG?",
             1 when groups[0].labels.Count > 1
@@ -731,22 +734,23 @@ private static void Main()
             1 => "Technically yes, but there is only one set of results.",
             _ => "NO! Multiple results are inconsistent!"
          }).Dump("Same results with all data structures?");
-     
+
         foreach (var (parents, labels) in groups) {
             void Display<T>(T content, string description)
-                => content.Dump(BuildDumpLabel(description, labels));
-        
+                => content.Dump(BuildDumpLabel(description, labels),
+                                noTotals: true);
+
             if (DebugParents) Display(parents, "Parents");
-            
+
             var selection = parents.ToEdgeSelection();
             if (DebugEdgeSelection) Display(selection, "Edge selection");
-            
+
             var dot = selection.ToDotCode("Full graph, parents tree in red");
             if (DebugDot) Display(dot, "DOT code");
-            
+
             Display(dot.ToSvg(), "Full graph, parents tree in red,");
         }
-        
+
         results.Clear();
     };
 
