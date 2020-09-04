@@ -451,13 +451,13 @@ internal sealed class Graph {
         _adj[src].Add((dest, weight));
     }
 
-    internal long?[]
+    internal int?[]
     ComputeShortestPaths(int start,
                          Func<IPriorityQueue<int, long>> priorityQueueSupplier)
     {
         CheckVertex(nameof(start), start);
 
-        var parents = new long?[Order];
+        var parents = new int?[Order];
         var done = new BitArray(Order);
         var heap = priorityQueueSupplier();
 
@@ -502,7 +502,7 @@ internal static class GraphExtensions {
     private static bool DebugEdgeSelection => false;
     private static bool DebugDot => false;
 
-    internal static long?[]
+    internal static int?[]
     ShowShortestPaths(this Graph graph,
                       int source,
                       Func<IPriorityQueue<int, long>> priorityQueueSupplier,
