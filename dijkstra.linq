@@ -263,27 +263,10 @@ internal readonly struct MarkedEdge<T> {
     internal int Weight => _edge.Weight;
 
     internal T Mark { get; }
+    
+    private object ToDump() => new { Src, Dest, Weight, Mark };
 
     private readonly Edge _edge;
-}
-
-/// <summary>An immutable list of edges with boolean markings.</summary>
-internal sealed class EdgeSelection : IReadOnlyList<MarkedEdge<bool>> {
-    internal EdgeSelection(int order, IEnumerable<MarkedEdge<bool>> edges)
-        => (Order, _edges) = (order, edges.ToList());
-
-    public MarkedEdge<bool> this[int index] => _edges[index];
-
-    public int Count => _edges.Count;
-
-    public IEnumerator<MarkedEdge<bool>> GetEnumerator()
-        => _edges.GetEnumerator();
-
-    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-
-    internal int Order { get; }
-
-    private readonly IReadOnlyList<MarkedEdge<bool>> _edges;
 }
 
 /// <summary>
@@ -453,38 +436,23 @@ internal sealed class ParentsTree : IEquatable<ParentsTree>,
     private readonly IReadOnlyList<int?> _parents;
 }
 
-/// <summary>Extended functionality for graphs.</summary>
-internal static class GraphExtensions {
-    private static bool DebugParents => false;
-    private static bool DebugEdgeSelection => false;
-    private static bool DebugDot => false;
+/// <summary>An immutable list of edges with boolean markings.</summary>
+internal sealed class EdgeSelection : IReadOnlyList<MarkedEdge<bool>> {
+    internal EdgeSelection(int order, IEnumerable<MarkedEdge<bool>> edges)
+        => (Order, _edges) = (order, edges.ToList());
 
-    internal static int?[]
-    ShowShortestPaths(this Graph graph,
-                      int source,
-                      Func<IPriorityQueue<int, long>> pqSupplier,
-                      string label)
-    {
-        var parents = graph.ComputeShortestPaths(source, pqSupplier);
-        if (DebugParents) parents.Dump($"Parents via {label}");
+    public MarkedEdge<bool> this[int index] => _edges[index];
 
-        var edgeSelection =
-            EmitEdgeSelection(graph.Edges,
-                              edge => parents[edge.dest] == edge.src)
-                .ToArray();
-        if (DebugEdgeSelection)
-            edgeSelection.Dump($"Edge selection via {label}", noTotals: true);
+    public int Count => _edges.Count;
 
-        var description = $"Shortest-path tree via {label}";
-        var dot = edgeSelection.ToDot(graph.Order, description);
-        if (DebugDot) dot.Dump($"DOT code via {label}");
-        dot.Visualize(description);
+    public IEnumerator<MarkedEdge<bool>> GetEnumerator()
+        => _edges.GetEnumerator();
 
-        return parents;
-    }
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
-    private static string
-    ToDot(this EdgeSelection selection, int order, string description)
+    internal int Order { get; }
+    
+    internal DotCode ToDotCode(string description)
     {
         const int indent = 4;
         var margin = new string(' ', indent);
@@ -492,23 +460,38 @@ internal static class GraphExtensions {
         builder.AppendLine($"digraph \"{description}\" {{");
 
         // Emit the vertices in ascending order, to be drawn as circles.
-        foreach (var vertex in Enumerable.Range(0, order))
+        foreach (var vertex in Enumerable.Range(0, Order))
             builder.AppendLine($"{margin}{vertex} [shape=\"circle\"]");
 
         builder.AppendLine();
 
         // Emit the edges in the order given, colorized according to selection.
-        foreach (var edge in selection) {
+        foreach (var edge in _edges) {
             var endpoints = $"{edge.Src} -> {edge.Dest}";
             var color = $"color=\"{(edge.Mark ? "red" : "gray")}\"";
             var label = $"label=\"{edge.Weight}\"";
             builder.AppendLine($"{margin}{edge} [{color} {label}]");
         }
-
-        return builder.AppendLine("}").ToString();
+        
+        builder.AppendLine("}");
+        
+        return new DotCode(builder.ToString());
     }
 
-    private static void Visualize(this string dot, string description)
+    private readonly IReadOnlyList<MarkedEdge<bool>> _edges;
+}
+
+/// <summary>DOT code for input to GraphViz.</summary>
+/// <remarks>
+/// Currently this just represents DOT as raw text (not an AST or anything).
+/// </remarks>
+internal sealed class DotCode {
+    internal DotCode(string code) => Code = code;
+    
+    internal string Code { get; }
+    
+    /// <summary>Runs <c>dot</c> to create a temporary SVG file.</summary>
+    internal object ToSvg()
     {
         var dir = Path.GetTempPath();
         var guid = Guid.NewGuid();
@@ -516,7 +499,7 @@ internal static class GraphExtensions {
         var svgPath = Path.Combine(dir, $"{guid}.svg");
 
         using (var writer = File.CreateText(dotPath))
-            writer.Write(dot);
+            writer.Write(Code);
 
         var proc = new Process();
 
@@ -537,8 +520,10 @@ internal static class GraphExtensions {
         proc.WaitForExit();
         // FIXME: Look at exit code?
 
-        Util.Image(svgPath).Dump(description);
+        return Util.Image(svgPath);
     }
+    
+    private object ToDump() => new TextArea(Code, 64);
 }
 
 /// <summary>UI to accept a graph description and trigger a run.</summary>
@@ -700,6 +685,25 @@ internal sealed class Controller {
     private readonly WrapPanel _buttons;
 }
 
+// FIXME: Add these as checkboxes to the controller.
+internal static bool DebugParents => true;
+internal static bool DebugEdgeSelection => true;
+internal static bool DebugDot => true;
+
+private static string BuildDumpLabel(string description,
+                                     IEnumerable<string> pqLabels)
+{
+    const int indent = 4;
+    var margin = new string(' ', indent);
+
+    var builder = new StringBuilder($"{description} via:");
+    
+    foreach (var label in pqLabels)
+        builder.AppendLine().Append(margin).Append(label.ToUpper());
+    
+    return builder.ToString();
+}
+
 private static void Main()
 {
     var controller = new Controller(typeof(UnsortedArrayPriorityQueue<,>),
@@ -729,13 +733,21 @@ private static void Main()
          }).Dump("Same results with all data structures?");
      
         foreach (var (parents, labels) in groups) {
-            var description = new StringBuilder("Parents via:");
+            void Display<T>(T content, string description)
+                => content.Dump(BuildDumpLabel(description, labels));
+        
+            if (DebugParents) Display(parents, "Parents");
             
-            foreach (var label in labels)
-                description.AppendLine().Append(label.ToUpper());
+            var selection = parents.ToEdgeSelection();
+            if (DebugEdgeSelection) Display(selection, "Edge selection");
             
-            parents.Dump(description.ToString());
+            var dot = selection.ToDotCode("Full graph, parents tree in red");
+            if (DebugDot) Display(dot, "DOT code");
+            
+            Display(dot.ToSvg(), "Full graph, parents tree in red,");
         }
+        
+        results.Clear();
     };
 
     controller.Show();
