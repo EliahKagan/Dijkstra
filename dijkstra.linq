@@ -433,8 +433,8 @@ internal sealed class ParentsTree : IEquatable<ParentsTree>,
     internal EdgeSelection ToEdgeSelection()
         => Supergraph.SelectEdges(edge => _parents[edge.dest] == edge.src);
 
-    private object ToDump() => _parents.Select((Parent, Child)
-        => new { Child, Parent });
+    private object ToDump()
+        => _parents.Select((Parent, Child) => new { Child, Parent });
 
     private readonly IReadOnlyList<int?> _parents;
 }
@@ -526,7 +526,7 @@ internal sealed class DotCode {
         return Util.Image(svgPath);
     }
 
-    private object ToDump() => new TextArea(Code, 40);
+    private object ToDump() => new TextArea(Code, columns: 40);
 }
 
 /// <summary>UI to accept a graph description and trigger a run.</summary>
@@ -553,7 +553,11 @@ internal sealed class Controller {
         _source = new TextArea(initialSource, columns: 10);
         _source.Rows = 1;
 
-        PopulateConfig(priorityQueues);
+        PopulatePriorityQueueControls(priorityQueues);
+
+        _verboseConfig = new WrapPanel(_parentsTable,
+                                       _edgeSelection,
+                                       _dotCode);
 
         _run = new Button("Run", OnRun);
         _buttons = new WrapPanel(_run, new Button("Clear", OnClear));
@@ -565,6 +569,7 @@ internal sealed class Controller {
         _edges.Dump("Edges");
         _source.Dump("Source");
         _pqConfig.Dump("Priority queues");
+        _verboseConfig.Dump("Verbose output");
         _buttons.Dump();
     }
 
@@ -572,6 +577,12 @@ internal sealed class Controller {
     SingleRun;
 
     internal event Action? RunsCompleted;
+
+    internal bool ParentsTableOn => _parentsTable.Checked;
+
+    internal bool EdgeSelectionOn => _edgeSelection.Checked;
+
+    internal bool DotCodeOn => _dotCode.Checked;
 
     private void OnRun(Button sender)
     {
@@ -632,10 +643,10 @@ internal sealed class Controller {
         var edges = _edges.Text;
         var source = _source.Text;
 
-        var config = _pqConfig.Children
+        var config = _pqConfig.Children.Concat(_verboseConfig.Children)
                               .Cast<CheckBox>()
                               .Select(cb => (cb, cb.Checked))
-                              .ToArray();
+                              .ToList();
 
         Util.ClearResults();
 
@@ -653,7 +664,7 @@ internal sealed class Controller {
                                    .Cast<CheckBox>()
                                    .Any(cb => cb.Checked);
 
-    void PopulateConfig(Type[] priorityQueues)
+    void PopulatePriorityQueueControls(Type[] priorityQueues)
     {
         if (priorityQueues.Length == 0) {
             throw new ArgumentException(
@@ -683,15 +694,18 @@ internal sealed class Controller {
 
     private readonly WrapPanel _pqConfig = new WrapPanel();
 
+    private readonly CheckBox _parentsTable = new CheckBox("parents table");
+
+    private readonly CheckBox _edgeSelection = new CheckBox("edge selection");
+
+    private readonly CheckBox _dotCode = new CheckBox("DOT code");
+
+    private readonly WrapPanel _verboseConfig;
+
     private readonly Button _run;
 
     private readonly WrapPanel _buttons;
 }
-
-// FIXME: Add these as checkboxes to the controller.
-internal static bool DebugParents => true;
-internal static bool DebugEdgeSelection => true;
-internal static bool DebugDot => true;
 
 private static string BuildDumpLabel(string description,
                                      IEnumerable<string> pqLabels)
@@ -701,8 +715,12 @@ private static string BuildDumpLabel(string description,
 
     var builder = new StringBuilder($"{description} via:");
 
-    foreach (var label in pqLabels)
-        builder.AppendLine().Append(margin).Append(label.ToUpper());
+    foreach (var label in pqLabels) {
+        builder.AppendLine()
+               .AppendLine() // Make extra vertical space for readability.
+               .Append(margin)
+               .Append(label.ToUpper());
+    }
 
     return builder.ToString();
 }
@@ -714,18 +732,21 @@ private static void Main()
 
     var results = new List<(string label, ParentsTree parents)>();
 
+    IEnumerable<(ParentsTree parents, List<string> labels)>
+    GroupedResults()
+        => from result in results
+           group result.label by result.parents into grp
+           select (parents: grp.Key, labels: grp.ToList());
+
     controller.SingleRun += (graph, source, supplier, label) => {
         var parents = graph.ComputeShortestPaths(source, supplier);
         results.Add((label, parents));
     };
 
     controller.RunsCompleted += () => {
-        var groups =
-            (from result in results
-             group result.label by result.parents into grp
-             select (parents: grp.Key, labels: grp.ToList()))
-             //select new { Parents = grp.Key, Labels = grp.ToList() })
-                .ToList();
+        Util.RawHtml("<hr/>").Dump();
+
+        var groups = GroupedResults().ToList();
 
         (groups.Count switch {
             0 => "No results at all. BUG?",
@@ -740,15 +761,16 @@ private static void Main()
                 => content.Dump(BuildDumpLabel(description, labels),
                                 noTotals: true);
 
-            if (DebugParents) Display(parents, "Parents");
+            if (controller.ParentsTableOn) Display(parents, "Parents");
 
             var selection = parents.ToEdgeSelection();
-            if (DebugEdgeSelection) Display(selection, "Edge selection");
+            if (controller.EdgeSelectionOn)
+                Display(selection, "Edge selection");
 
-            var dot = selection.ToDotCode("Full graph, parents tree in red");
-            if (DebugDot) Display(dot, "DOT code");
-
-            Display(dot.ToSvg(), "Full graph, parents tree in red,");
+            const string description = "Full graph, parents tree in red";
+            var dot = selection.ToDotCode(description);
+            if (controller.DotCodeOn) Display(dot, "DOT code");
+            Display(dot.ToSvg(), $"{description},");
         }
 
         results.Clear();
