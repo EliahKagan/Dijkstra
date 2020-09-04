@@ -245,21 +245,26 @@ internal readonly struct Edge {
     internal int Weight { get; }
 }
 
+/// <summary>Convenience functions for marked edges.</summary>
+internal static class MarkedEdge {
+    internal static MarkedEdge<T> Create<T>(Edge edge, T mark)
+        => new MarkedEdge<T>(edge, mark);
+}
+
 /// <summary>A marked edge in a weighted directed graph.</summary>
 internal readonly struct MarkedEdge<T> {
-    internal MarkedEdge(int src, int dest, int weight, T mark)
-        => (Src, Dest, Weight, Mark) = (src, dest, weight, mark);
-
     internal MarkedEdge(Edge edge, T mark)
-        : this(edge.Src, edge.Dest, edge.Weight, mark) { }
+        => (_edge, Mark) = (edge, mark);
 
-    internal int Src { get; }
+    internal int Src => _edge.Src;
 
-    internal int Dest { get; }
+    internal int Dest => _edge.Dest;
 
-    internal int Weight { get; }
+    internal int Weight => _edge.Weight;
 
     internal T Mark { get; }
+
+    private readonly Edge _edge;
 }
 
 /// <summary>An immutable list of edges with boolean markings.</summary>
@@ -372,12 +377,12 @@ internal sealed class Graph {
                     var bestIndex = indices.MinBy(i => group[i].Weight);
 
                     foreach (var index in indices) {
-                        yield return new MarkedEdge<bool>(group[index],
-                                                          index == bestIndex);
+                        yield return MarkedEdge.Create(group[index],
+                                                       index == bestIndex);
                     }
                 } else {
                     foreach (var edge in group)
-                        yield return new MarkedEdge<bool>(edge, false);
+                        yield return MarkedEdge.Create(edge, false);
                 }
             }
         }
