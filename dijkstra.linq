@@ -320,7 +320,7 @@ internal sealed class Graph {
         _adj[src].Add((dest, weight));
     }
 
-    internal int?[]
+    internal ParentsTree
     ComputeShortestPaths(int start, Func<IPriorityQueue<int, long>> pqSupplier)
     {
         CheckVertex(nameof(start), start);
@@ -339,10 +339,10 @@ internal sealed class Graph {
             }
         }
 
-        return parents;
+        return new ParentsTree(this, parents);
     }
 
-    private IEnumerable<Edge> Edges
+    internal IEnumerable<Edge> Edges
     {
         get {
             foreach (var src in Enumerable.Range(0, Order)) {
@@ -351,20 +351,8 @@ internal sealed class Graph {
             }
         }
     }
-
-    private IReadOnlyDictionary<(int src, int dest), IReadOnlyList<Edge>>
-    GroupParallelEdges()
-    {
-        var parallels = new Dictionary<(int src, int dest),
-                                       IReadOnlyList<Edge>>();
-
-        foreach (var group in Edges.GroupBy(edge => (edge.Src, edge.Dest)))
-            parallels.Add(group.Key, group.ToList());
-
-        return parallels;
-    }
-
-    private EdgeSelection
+    
+    internal EdgeSelection
     SelectEdges(Func<(int src, int dest), bool> predicate)
     {
         var parallels = GroupParallelEdges();
@@ -390,6 +378,18 @@ internal sealed class Graph {
         return new EdgeSelection(Order, Emit());
     }
 
+    private IReadOnlyDictionary<(int src, int dest), IReadOnlyList<Edge>>
+    GroupParallelEdges()
+    {
+        var parallels = new Dictionary<(int src, int dest),
+                                       IReadOnlyList<Edge>>();
+
+        foreach (var group in Edges.GroupBy(edge => (edge.Src, edge.Dest)))
+            parallels.Add(group.Key, group.ToList());
+
+        return parallels;
+    }
+
     private void CheckVertex(string paramName, int vertex)
     {
         if (!(0 <= vertex && vertex < Order)) {
@@ -400,6 +400,57 @@ internal sealed class Graph {
     }
 
     private readonly IList<IList<(int dest, int weight)>> _adj;
+}
+
+/// <summary>A tree in a graph, represented as a parents list.</summary>
+internal sealed class ParentsTree : IEquatable<ParentsTree>,
+                                    IReadOnlyList<int?> {
+    /// <summary>Constructs a parents tree.</summary>
+    /// <remarks>Does not range-check or cycle-check the parents.</remarks>
+    internal ParentsTree(Graph graph, IReadOnlyList<int?> parents)
+        => (Supergraph, _parents) = (graph, parents);
+    
+    internal Graph Supergraph { get; }
+    
+    internal int Order => _parents.Count;
+    
+    public bool Equals(ParentsTree? other)
+        => other != null
+            && Supergraph == other.Supergraph
+            && _parents.SequenceEqual(other._parents);
+    
+    public override bool Equals(object? other)
+        => Equals(other as ParentsTree);
+    
+    public override int GetHashCode()
+    {
+        const int seed = 17;
+        const int multiplier = 8191;
+        
+        var code = seed;
+        
+        unchecked {
+            code = code * multiplier + Supergraph.GetHashCode();
+            
+            foreach (var parent in _parents)
+                code = code * multiplier + parent.GetHashCode();
+        }
+        
+        return code;
+    }
+    
+    public int? this[int child] => _parents[child];
+    
+    int IReadOnlyCollection<int?>.Count => Order;
+    
+    public IEnumerator<int?> GetEnumerator() => _parents.GetEnumerator();
+    
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    
+    internal EdgeSelection ToEdgeSelection()
+        => Supergraph.SelectEdges(edge => _parents[edge.dest] == edge.src);
+    
+    private readonly IReadOnlyList<int?> _parents;
 }
 
 /// <summary>Extended functionality for graphs.</summary>
@@ -530,7 +581,9 @@ internal sealed class Controller {
     }
 
     internal event Action<Graph, int, Func<IPriorityQueue<int, long>>, string>?
-    Run;
+    SingleRun;
+    
+    internal event Action? RunsCompleted;
 
     private void OnRun(Button sender)
     {
@@ -539,8 +592,9 @@ internal sealed class Controller {
         var graph = BuildGraph();
         var source = int.Parse(_source.Text);
 
-        var run = Run; // Don't respond to handler changes while running.
-        if (run == null) return;
+        // Don't respond to handler changes while running.
+        var singleRun = SingleRun;
+        var runsCompleted = RunsCompleted;
 
         _pqConfig.Children
                  .Cast<CheckBox>()
@@ -548,7 +602,12 @@ internal sealed class Controller {
                  .Select(cb => cb.Text)
                  .Select(text => (supplier: _pqSuppliers[text], label: text))
                  .ToList() // Don't respond to config changes while running.
-                 .ForEach(row => run(graph, source, row.supplier, row.label));
+                 .ForEach(row => singleRun?.Invoke(graph,
+                                                   source,
+                                                   row.supplier,
+                                                   row.label));
+        
+        runsCompleted?.Invoke();
     }
 
     private Graph BuildGraph()
@@ -646,18 +705,38 @@ private static void Main()
     var controller = new Controller(typeof(UnsortedArrayPriorityQueue<,>),
                                     typeof(BinaryHeap<,>));
 
-    var results = new List<int?[]>();
-
-    controller.Run += (graph, source, supplier, label) => {
-        results.Add(graph.ShowShortestPaths(source,
-                                            supplier,
-                                            label.ToUpper()));
+    var results = new List<(string label, ParentsTree parents)>();
+    
+    controller.SingleRun += (graph, source, supplier, label) => {
+        var parents = graph.ComputeShortestPaths(source, supplier);
+        results.Add((label, parents));
+    };
+    
+    controller.RunsCompleted += () => {
+        var groups =
+            (from result in results
+             group result.label by result.parents into grp
+             select (parents: grp.Key, labels: grp.ToList()))
+             //select new { Parents = grp.Key, Labels = grp.ToList() })
+                .ToList();
+        
+        (groups.Count switch {
+            0 => "No results at all. BUG?",
+            1 when groups[0].labels.Count > 1
+              => "YES, multiple results are consistent.",
+            1 => "Technically yes, but there is only one set of results.",
+            _ => "NO! Multiple results are inconsistent!"
+         }).Dump("Same results with all data structures?");
+     
+        foreach (var (parents, labels) in groups) {
+            var description = new StringBuilder("Parents via:");
+            
+            foreach (var label in labels)
+                description.AppendLine().Append(label.ToUpper());
+            
+            parents.Dump(description.ToString());
+        }
     };
 
     controller.Show();
-
-    if (results.Count > 1) {
-        results.Skip(1).All(res => results[0].SequenceEqual(res))
-               .Dump("Same results?");
-    }
 }
