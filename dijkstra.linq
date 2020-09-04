@@ -320,12 +320,12 @@ internal sealed class Graph {
         _adj[src].Add((dest, weight));
     }
 
-    internal long?[]
+    internal int?[]
     ComputeShortestPaths(int start, Func<IPriorityQueue<int, long>> pqSupplier)
     {
         CheckVertex(nameof(start), start);
 
-        var parents = new long?[Order];
+        var parents = new int?[Order];
         var done = new BitArray(Order);
         var heap = pqSupplier();
 
@@ -408,7 +408,7 @@ internal static class GraphExtensions {
     private static bool DebugEdgeSelection => false;
     private static bool DebugDot => false;
 
-    internal static long?[]
+    internal static int?[]
     ShowShortestPaths(this Graph graph,
                       int source,
                       Func<IPriorityQueue<int, long>> pqSupplier,
@@ -646,7 +646,7 @@ private static void Main()
     var controller = new Controller(typeof(UnsortedArrayPriorityQueue<,>),
                                     typeof(BinaryHeap<,>));
 
-    var results = new List<long?[]>();
+    var results = new List<int?[]>();
 
     controller.Run += (graph, source, supplier, label) => {
         results.Add(graph.ShowShortestPaths(source,
