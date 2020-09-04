@@ -767,7 +767,7 @@ private static void Main()
             if (controller.EdgeSelectionOn)
                 Display(selection, "Edge selection");
 
-            const string description = "Full graph, parents tree in red";
+            const string description = "Full graph, shortest paths in red";
             var dot = selection.ToDotCode(description);
             if (controller.DotCodeOn) Display(dot, "DOT code");
             Display(dot.ToSvg(), $"{description},");
