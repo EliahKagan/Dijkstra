@@ -526,7 +526,12 @@ internal sealed class DotCode {
         return Util.Image(svgPath);
     }
 
-    private object ToDump() => new TextArea(Code, columns: 40);
+    private object ToDump()
+    {
+        var box = new TextArea(Code, columns: 40);
+        box.Enabled = false;
+        return box;
+    }
 }
 
 /// <summary>UI to accept a graph description and trigger a run.</summary>
