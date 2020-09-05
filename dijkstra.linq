@@ -2,6 +2,11 @@
   <Namespace>LINQPad.Controls</Namespace>
 </Query>
 
+/// <summary>Configuration options not exposed by the controller.</summary>
+internal static class Configuration {
+    internal static bool DisableControlsWhileProcessing => true;
+}
+
 /// <summary>LINQ-style extension methods.</summary>
 internal static class EnumerableExtensions {
     internal static TSource
@@ -594,26 +599,33 @@ internal sealed class Controller {
 
     private void OnRun(Button sender)
     {
-        // Fail fast on malformed graph input.
-        var graph = BuildGraph();
-        var source = int.Parse(_source.Text);
+        MaybeDisableAllControls();
 
-        // Don't respond to handler changes while running.
-        var singleRun = SingleRun;
-        var runsCompleted = RunsCompleted;
+        try {
+            // Fail fast on malformed graph input.
+            var graph = BuildGraph();
+            var source = int.Parse(_source.Text);
 
-        _pqConfig.Children
-                 .Cast<CheckBox>()
-                 .Where(cb => cb.Checked)
-                 .Select(cb => cb.Text)
-                 .Select(text => (supplier: _pqSuppliers[text], label: text))
-                 .ToList() // Don't respond to config changes while running.
-                 .ForEach(row => singleRun?.Invoke(graph,
-                                                   source,
-                                                   row.supplier,
-                                                   row.label));
+            // Don't respond to handler changes while running.
+            var singleRun = SingleRun;
+            var runsCompleted = RunsCompleted;
 
-        runsCompleted?.Invoke();
+            _pqConfig.Children
+                     .Cast<CheckBox>()
+                     .Where(cb => cb.Checked)
+                     .Select(cb => cb.Text)
+                     .Select(text => (supplier: _pqSuppliers[text],
+                                      label: text))
+                     .ToList() // Never respond to config changes in mid-run.
+                     .ForEach(row => singleRun?.Invoke(graph,
+                                                       source,
+                                                       row.supplier,
+                                                       row.label));
+
+            runsCompleted?.Invoke();
+        } finally {
+            MaybeEnableAllControls();
+        }
     }
 
     private Graph BuildGraph()
@@ -650,10 +662,7 @@ internal sealed class Controller {
         var edges = _edges.Text;
         var source = _source.Text;
 
-        var config = _pqConfig.Children.Concat(_outputConfig.Children)
-                              .Cast<CheckBox>()
-                              .Select(cb => (cb, cb.Checked))
-                              .ToList();
+        var config = CheckBoxes.Select(cb => (cb, cb.Checked)).ToList();
 
         Util.ClearResults();
 
@@ -674,7 +683,38 @@ internal sealed class Controller {
         _run.Enabled = AnyChecked(_pqConfig) && AnyChecked(_outputConfig);
     }
 
-    void PopulatePriorityQueueControls(Type[] priorityQueues)
+    void MaybeDisableAllControls()
+    {
+        if (!Configuration.DisableControlsWhileProcessing) return;
+
+        foreach (var control in Controls) control.Enabled = false;
+    }
+
+    void MaybeEnableAllControls()
+    {
+        if (!Configuration.DisableControlsWhileProcessing) return;
+
+        foreach (var control in Controls) control.Enabled = true;
+    }
+
+    private IEnumerable<Control> Controls
+        => TextAreas.Cast<Control>().Concat(CheckBoxes.Cast<Control>());
+
+    private IEnumerable<TextArea> TextAreas
+    {
+        get {
+            yield return _order;
+            yield return _edges;
+            yield return _source;
+        }
+    }
+
+    private IEnumerable<CheckBox> CheckBoxes
+        => _pqConfig.Children
+            .Concat(_outputConfig.Children)
+            .Cast<CheckBox>();
+
+    private void PopulatePriorityQueueControls(Type[] priorityQueues)
     {
         if (priorityQueues.Length == 0) {
             throw new ArgumentException(
