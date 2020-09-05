@@ -555,9 +555,15 @@ internal sealed class Controller {
 
         PopulatePriorityQueueControls(priorityQueues);
 
-        _verboseConfig = new WrapPanel(_parentsTable,
-                                       _edgeSelection,
-                                       _dotCode);
+        _parentsTable = new CheckBox("parents table", false, OnConfig);
+        _edgeSelection = new CheckBox("edge selection", false, OnConfig);
+        _dotCode = new CheckBox("DOT code", false, OnConfig);
+        _drawing = new CheckBox("graph drawing", true, OnConfig);
+
+        _outputConfig = new WrapPanel(_parentsTable,
+                                      _edgeSelection,
+                                      _dotCode,
+                                      _drawing);
 
         _run = new Button("Run", OnRun);
         _buttons = new WrapPanel(_run, new Button("Clear", OnClear));
@@ -569,7 +575,7 @@ internal sealed class Controller {
         _edges.Dump("Edges");
         _source.Dump("Source");
         _pqConfig.Dump("Priority queues");
-        _verboseConfig.Dump("Verbose output");
+        _outputConfig.Dump("Output");
         _buttons.Dump();
     }
 
@@ -584,10 +590,11 @@ internal sealed class Controller {
 
     internal bool DotCodeOn => _dotCode.Checked;
 
+    internal bool DrawingOn => _drawing.Checked;
+
     private void OnRun(Button sender)
     {
-        // Always build the graph, even if no handler is registered to
-        // accept it, so that wrong input will always be reported.
+        // Fail fast on malformed graph input.
         var graph = BuildGraph();
         var source = int.Parse(_source.Text);
 
@@ -643,7 +650,7 @@ internal sealed class Controller {
         var edges = _edges.Text;
         var source = _source.Text;
 
-        var config = _pqConfig.Children.Concat(_verboseConfig.Children)
+        var config = _pqConfig.Children.Concat(_outputConfig.Children)
                               .Cast<CheckBox>()
                               .Select(cb => (cb, cb.Checked))
                               .ToList();
@@ -660,9 +667,12 @@ internal sealed class Controller {
     }
 
     private void OnConfig(CheckBox? sender)
-        => _run.Enabled = _pqConfig.Children
-                                   .Cast<CheckBox>()
-                                   .Any(cb => cb.Checked);
+    {
+        static bool AnyChecked(WrapPanel panel)
+            => panel.Children.Cast<CheckBox>().Any(cb => cb.Checked);
+
+        _run.Enabled = AnyChecked(_pqConfig) && AnyChecked(_outputConfig);
+    }
 
     void PopulatePriorityQueueControls(Type[] priorityQueues)
     {
@@ -694,13 +704,15 @@ internal sealed class Controller {
 
     private readonly WrapPanel _pqConfig = new WrapPanel();
 
-    private readonly CheckBox _parentsTable = new CheckBox("parents table");
+    private readonly CheckBox _parentsTable;
 
-    private readonly CheckBox _edgeSelection = new CheckBox("edge selection");
+    private readonly CheckBox _edgeSelection;
 
-    private readonly CheckBox _dotCode = new CheckBox("DOT code");
+    private readonly CheckBox _dotCode;
 
-    private readonly WrapPanel _verboseConfig;
+    private readonly CheckBox _drawing;
+
+    private readonly WrapPanel _outputConfig;
 
     private readonly Button _run;
 
@@ -768,9 +780,11 @@ private static void Main()
                 Display(selection, "Edge selection");
 
             const string description = "Full graph, shortest paths in red";
+
             var dot = selection.ToDotCode(description);
             if (controller.DotCodeOn) Display(dot, "DOT code");
-            Display(dot.ToSvg(), $"{description},");
+
+            if (controller.DrawingOn) Display(dot.ToSvg(), $"{description},");
         }
 
         results.Clear();
