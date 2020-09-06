@@ -549,14 +549,9 @@ internal sealed class Controller {
                         string initialSource,
                         params Type[] priorityQueues)
     {
-        _order = new TextArea(initialOrder, columns: 10);
-        _order.Rows = 1;
-
-        _edges = new TextArea(initialEdges, columns: 50);
-        _edges.Rows = 20;
-
-        _source = new TextArea(initialSource, columns: 10);
-        _source.Rows = 1;
+        _order = new TextArea(initialOrder, columns: 10) { Rows = 1 };
+        _edges = new TextArea(initialEdges, columns: 50) { Rows = 20 };
+        _source = new TextArea(initialSource, columns: 10) { Rows = 1 };
 
         PopulatePriorityQueueControls(priorityQueues);
 
