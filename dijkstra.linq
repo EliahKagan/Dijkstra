@@ -55,7 +55,7 @@ internal static class TypeExtensions {
     internal static string GetInformalName(this Type type)
     {
         var attrs = type.GetCustomAttributes(typeof(InformalNameAttribute),
-                                             false);
+                                             inherit: false);
         if (attrs.Length != 0)
             return ((InformalNameAttribute)attrs[0]).InformalName;
 
