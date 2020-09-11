@@ -113,7 +113,6 @@ internal interface IPriorityQueue<TKey, TValue> {
 /// A naive priority queue for Prim's and Dijkstra's algorithms.
 /// </summary>
 /// <remarks>O(1) insert/decrease. O(n) extract-min.</remarks>
-[InformalName("naive priority queue")] // FIXME: remove after testing
 internal sealed class UnsortedArrayPriorityQueue<TKey, TValue>
         : IPriorityQueue<TKey, TValue> where TKey : notnull {
     internal UnsortedArrayPriorityQueue() : this(Comparer<TValue>.Default) { }
