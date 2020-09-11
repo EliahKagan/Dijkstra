@@ -37,10 +37,28 @@ internal static class EnumerableExtensions {
     }
 }
 
+/// <summary>
+/// Supplies a custom informal name for a data structure.
+/// <see cref="TypeExtensions.GetInformalName(System.Type)"/>.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct,
+                Inherited = false, AllowMultiple = false)]
+internal sealed class InformalNameAttribute : Attribute {
+    internal InformalNameAttribute(string informalName)
+        => InformalName = informalName;
+
+    internal string InformalName { get; }
+}
+
 /// <summary>Convenience functionality for using reflection.</summary>
 internal static class TypeExtensions {
     internal static string GetInformalName(this Type type)
     {
+        var attrs = type.GetCustomAttributes(typeof(InformalNameAttribute),
+                                             false);
+        if (attrs.Length != 0)
+            return ((InformalNameAttribute)attrs[0]).InformalName;
+
         var name = type.Name;
         var end = name.IndexOf('`');
         if (end != -1) name = name[0..end];
@@ -95,6 +113,7 @@ internal interface IPriorityQueue<TKey, TValue> {
 /// A naive priority queue for Prim's and Dijkstra's algorithms.
 /// </summary>
 /// <remarks>O(1) insert/decrease. O(n) extract-min.</remarks>
+[InformalName("naive priority queue")] // FIXME: remove after testing
 internal sealed class UnsortedArrayPriorityQueue<TKey, TValue>
         : IPriorityQueue<TKey, TValue> where TKey : notnull {
     internal UnsortedArrayPriorityQueue() : this(Comparer<TValue>.Default) { }
