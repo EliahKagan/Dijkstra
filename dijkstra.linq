@@ -517,7 +517,7 @@ internal sealed class DotCode {
     internal string Code { get; }
 
     /// <summary>Runs <c>dot</c> to create a temporary SVG file.</summary>
-    internal object ToSvg()
+    internal Svg ToSvg()
     {
         var dir = Path.GetTempPath();
         var guid = Guid.NewGuid();
@@ -546,7 +546,7 @@ internal sealed class DotCode {
         proc.WaitForExit();
         // FIXME: Look at exit code?
 
-        return Util.Image(svgPath);
+        return new Svg(File.ReadAllText(svgPath), 300, 566); // super buggy
     }
 
     private object ToDump() => new TextArea(Code, columns: 40);
