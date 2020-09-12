@@ -297,6 +297,7 @@ internal readonly struct MarkedEdge<T> {
 /// Dijkstra's algorithms.
 /// </summary>
 /// <remarks>O(1) insert/decrease. O(log n) extract-min. (Amortized.)</remarks>
+[InformalName("Fibonacci heap")] // Otherwise it would not show up capitalized.
 internal sealed class FibonacciHeap<TKey, TValue>
         : IPriorityQueue<TKey, TValue> where TKey : notnull {
     internal FibonacciHeap() : this(Comparer<TValue>.Default) { }
@@ -1008,7 +1009,8 @@ private static string BuildDumpLabel(string description,
 private static void Main()
 {
     var controller = new Controller(typeof(UnsortedArrayPriorityQueue<,>),
-                                    typeof(BinaryHeap<,>));
+                                    typeof(BinaryHeap<,>),
+                                    typeof(FibonacciHeap<,>));
 
     var results = new List<(string label, ParentsTree parents)>();
 
