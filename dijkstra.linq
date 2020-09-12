@@ -2,6 +2,11 @@
   <Namespace>LINQPad.Controls</Namespace>
 </Query>
 
+/// <summary>Configuration options not exposed by the controller.</summary>
+internal static class Configuration {
+    internal static bool DisableControlsWhileProcessing => true;
+}
+
 /// <summary>LINQ-style extension methods.</summary>
 internal static class EnumerableExtensions {
     internal static TSource
@@ -30,6 +35,57 @@ internal static class EnumerableExtensions {
 
         return min;
     }
+}
+
+/// <summary>
+/// Supplies a custom informal name for a data structure.
+/// <see cref="TypeExtensions.GetInformalName(System.Type)"/>.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct,
+                Inherited = false, AllowMultiple = false)]
+internal sealed class InformalNameAttribute : Attribute {
+    internal InformalNameAttribute(string informalName)
+        => InformalName = informalName;
+
+    internal string InformalName { get; }
+}
+
+/// <summary>Convenience functionality for using reflection.</summary>
+internal static class TypeExtensions {
+    internal static string GetInformalName(this Type type)
+    {
+        var attrs = type.GetCustomAttributes(typeof(InformalNameAttribute),
+                                             inherit: false);
+        if (attrs.Length != 0)
+            return ((InformalNameAttribute)attrs[0]).InformalName;
+
+        var name = type.Name;
+        var end = name.IndexOf('`');
+        if (end != -1) name = name[0..end];
+
+        return string.Join(" ", GetLowerCamelWords(name));
+    }
+
+    internal static Func<T> CreateSupplier<T>(this Type type) where T : notnull
+        => () => type.CreateAsNonnull<T>();
+
+    private static IEnumerable<string> GetLowerCamelWords(string name)
+        => camelParser.Matches(name).Select(match => match.Value.ToLower());
+
+    private static T CreateAsNonnull<T>(this Type type) where T : notnull
+    {
+        var instance = Activator.CreateInstance(type, nonPublic: true);
+
+        if (instance == null) {
+            throw new NotSupportedException(
+                    "Bug: non-nullable type instantiated null");
+        }
+
+        return (T)instance;
+    }
+
+    private static readonly Regex camelParser =
+        new Regex(@"(?:^.|\p{Lu})\P{Lu}*");
 }
 
 /// <summary>
@@ -98,8 +154,7 @@ internal sealed class BinaryHeap<TKey, TValue> : IPriorityQueue<TKey, TValue>
         where TKey : notnull {
     internal BinaryHeap() : this(Comparer<TValue>.Default) { }
 
-    internal BinaryHeap(IComparer<TValue> comparer)
-        => _comparer = comparer;
+    internal BinaryHeap(IComparer<TValue> comparer) => _comparer = comparer;
 
     public int Count => _heap.Count;
 
@@ -198,8 +253,43 @@ internal sealed class BinaryHeap<TKey, TValue> : IPriorityQueue<TKey, TValue>
     private readonly IList<KeyValuePair<TKey, TValue>> _heap =
         new List<KeyValuePair<TKey, TValue>>();
 
-    private readonly IDictionary<TKey, int> _map =
-        new Dictionary<TKey, int>();
+    private readonly IDictionary<TKey, int> _map = new Dictionary<TKey, int>();
+}
+
+/// <summary>An edge in a weighted directed graph.</summary>
+internal readonly struct Edge {
+    internal Edge(int src, int dest, int weight)
+        => (Src, Dest, Weight) = (src, dest, weight);
+
+    internal int Src { get; }
+
+    internal int Dest { get; }
+
+    internal int Weight { get; }
+}
+
+/// <summary>Convenience functions for marked edges.</summary>
+internal static class MarkedEdge {
+    internal static MarkedEdge<T> Create<T>(Edge edge, T mark)
+        => new MarkedEdge<T>(edge, mark);
+}
+
+/// <summary>A marked edge in a weighted directed graph.</summary>
+internal readonly struct MarkedEdge<T> {
+    internal MarkedEdge(Edge edge, T mark)
+        => (_edge, Mark) = (edge, mark);
+
+    internal int Src => _edge.Src;
+
+    internal int Dest => _edge.Dest;
+
+    internal int Weight => _edge.Weight;
+
+    internal T Mark { get; }
+
+    private object ToDump() => new { Src, Dest, Weight, Mark };
+
+    private readonly Edge _edge;
 }
 
 /// <summary>
@@ -451,15 +541,14 @@ internal sealed class Graph {
         _adj[src].Add((dest, weight));
     }
 
-    internal int?[]
-    ComputeShortestPaths(int start,
-                         Func<IPriorityQueue<int, long>> priorityQueueSupplier)
+    internal ParentsTree
+    ComputeShortestPaths(int start, Func<IPriorityQueue<int, long>> pqSupplier)
     {
         CheckVertex(nameof(start), start);
 
         var parents = new int?[Order];
         var done = new BitArray(Order);
-        var heap = priorityQueueSupplier();
+        var heap = pqSupplier();
 
         for (heap.InsertOrDecrease(start, 0L); heap.Count != 0; ) {
             var (src, cost) = heap.ExtractMin();
@@ -471,17 +560,55 @@ internal sealed class Graph {
             }
         }
 
-        return parents;
+        return new ParentsTree(this, parents);
     }
 
-    internal IEnumerable<(int src, int dest, int weight)> Edges
+    internal IEnumerable<Edge> Edges
     {
         get {
             foreach (var src in Enumerable.Range(0, Order)) {
                 foreach (var (dest, weight) in _adj[src])
-                    yield return (src, dest, weight);
+                    yield return new Edge(src, dest, weight);
             }
         }
+    }
+
+    internal EdgeSelection
+    SelectEdges(Func<(int src, int dest), bool> predicate)
+    {
+        var parallels = GroupParallelEdges();
+
+        IEnumerable<MarkedEdge<bool>> Emit()
+        {
+            foreach (var (endpoints, group) in parallels) {
+                if (predicate(endpoints)) {
+                    var indices = Enumerable.Range(0, group.Count);
+                    var bestIndex = indices.MinBy(i => group[i].Weight);
+
+                    foreach (var index in indices) {
+                        yield return MarkedEdge.Create(group[index],
+                                                       index == bestIndex);
+                    }
+                } else {
+                    foreach (var edge in group)
+                        yield return MarkedEdge.Create(edge, false);
+                }
+            }
+        }
+
+        return new EdgeSelection(Order, Emit());
+    }
+
+    private IReadOnlyDictionary<(int src, int dest), IReadOnlyList<Edge>>
+    GroupParallelEdges()
+    {
+        var parallels = new Dictionary<(int src, int dest),
+                                       IReadOnlyList<Edge>>();
+
+        foreach (var group in Edges.GroupBy(edge => (edge.Src, edge.Dest)))
+            parallels.Add(group.Key, group.ToList());
+
+        return parallels;
     }
 
     private void CheckVertex(string paramName, int vertex)
@@ -496,70 +623,77 @@ internal sealed class Graph {
     private readonly IList<IList<(int dest, int weight)>> _adj;
 }
 
-/// <summary>Extended functionality for graphs.</summary>
-internal static class GraphExtensions {
-    private static bool DebugParents => false;
-    private static bool DebugEdgeSelection => false;
-    private static bool DebugDot => false;
+/// <summary>A tree in a graph, represented as a parents list.</summary>
+internal sealed class ParentsTree : IEquatable<ParentsTree>,
+                                    IReadOnlyList<int?> {
+    /// <summary>Constructs a parents tree.</summary>
+    /// <remarks>Does not range-check or cycle-check the parents.</remarks>
+    internal ParentsTree(Graph graph, IReadOnlyList<int?> parents)
+        => (Supergraph, _parents) = (graph, parents);
 
-    internal static int?[]
-    ShowShortestPaths(this Graph graph,
-                      int source,
-                      Func<IPriorityQueue<int, long>> priorityQueueSupplier,
-                      string label)
+    internal Graph Supergraph { get; }
+
+    internal int Order => _parents.Count;
+
+    public bool Equals(ParentsTree? other)
+        => other != null
+            && Supergraph == other.Supergraph
+            && _parents.SequenceEqual(other._parents);
+
+    public override bool Equals(object? other)
+        => Equals(other as ParentsTree);
+
+    public override int GetHashCode()
     {
-        label = label.ToUpper();
+        const int seed = 17;
+        const int multiplier = 8191;
 
-        var parents = graph.ComputeShortestPaths(source,
-                                                 priorityQueueSupplier);
-        if (DebugParents) parents.Dump($"Parents via {label}");
+        var code = seed;
 
-        var edgeSelection =
-            EmitEdgeSelection(graph.Edges,
-                              edge => parents[edge.dest] == edge.src)
-                .ToArray();
-        if (DebugEdgeSelection)
-            edgeSelection.Dump($"Edge selection via {label}", noTotals: true);
+        unchecked {
+            code = code * multiplier + Supergraph.GetHashCode();
 
-        var description = $"Shortest-path tree via {label}";
-        var dot = edgeSelection.ToDot(graph.Order, description);
-        if (DebugDot) dot.Dump($"DOT code via {label}");
-        dot.Visualize(description);
-
-        return parents;
-    }
-
-    private static IEnumerable<(int src, int dest, int weight, bool marked)>
-    EmitEdgeSelection(IEnumerable<(int src, int dest, int weight)> edges,
-                      Func<(int src, int dest), bool> predicate)
-    {
-        var parallels = new Dictionary<(int src, int dest),
-                                       (int src, int dest, int weight)[]>(
-                edges.GroupBy(edge => (edge.src, edge.dest))
-                     .Select(group => KeyValuePair.Create(group.Key,
-                                                          group.ToArray())));
-
-        foreach (var (endpoints, parallelEdges) in parallels) {
-            if (predicate(endpoints)) {
-                var indices = Enumerable.Range(0, parallelEdges.Length);
-                var best = indices.MinBy(i => parallelEdges[i].weight);
-
-                foreach (var i in indices) {
-                    var (src, dest, weight) = parallelEdges[i];
-                    yield return (src, dest, weight, i == best);
-                }
-            } else {
-                foreach (var (src, dest, weight) in parallelEdges)
-                    yield return (src, dest, weight, false);
-            }
+            foreach (var parent in _parents)
+                code = code * multiplier + parent.GetHashCode();
         }
+
+        return code;
     }
 
-    private static string
-    ToDot(this IEnumerable<(int src, int dest, int weight, bool marked)>
-                edgeSelection,
-          int order,
-          string description)
+    public int? this[int child] => _parents[child];
+
+    int IReadOnlyCollection<int?>.Count => Order;
+
+    public IEnumerator<int?> GetEnumerator() => _parents.GetEnumerator();
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+    internal EdgeSelection ToEdgeSelection()
+        => Supergraph.SelectEdges(edge => _parents[edge.dest] == edge.src);
+
+    private object ToDump()
+        => _parents.Select((Parent, Child) => new { Child, Parent });
+
+    private readonly IReadOnlyList<int?> _parents;
+}
+
+/// <summary>An immutable list of edges with boolean markings.</summary>
+internal sealed class EdgeSelection : IReadOnlyList<MarkedEdge<bool>> {
+    internal EdgeSelection(int order, IEnumerable<MarkedEdge<bool>> edges)
+        => (Order, _edges) = (order, edges.ToList());
+
+    public MarkedEdge<bool> this[int index] => _edges[index];
+
+    public int Count => _edges.Count;
+
+    public IEnumerator<MarkedEdge<bool>> GetEnumerator()
+        => _edges.GetEnumerator();
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+    internal int Order { get; }
+
+    internal DotCode ToDotCode(string description)
     {
         const int indent = 4;
         var margin = new string(' ', indent);
@@ -567,23 +701,38 @@ internal static class GraphExtensions {
         builder.AppendLine($"digraph \"{description}\" {{");
 
         // Emit the vertices in ascending order, to be drawn as circles.
-        foreach (var vertex in Enumerable.Range(0, order))
+        foreach (var vertex in Enumerable.Range(0, Order))
             builder.AppendLine($"{margin}{vertex} [shape=\"circle\"]");
 
         builder.AppendLine();
 
         // Emit the edges in the order given, colorized according to selection.
-        foreach (var (src, dest, weight, marked) in edgeSelection) {
-            var edge = $"{src} -> {dest}";
-            var color = $"color=\"{(marked ? "red" : "gray")}\"";
-            var label = $"label=\"{weight}\"";
-            builder.AppendLine($"{margin}{edge} [{color} {label}]");
+        foreach (var edge in _edges) {
+            var endpoints = $"{edge.Src} -> {edge.Dest}";
+            var color = $"color=\"{(edge.Mark ? "red" : "gray")}\"";
+            var label = $"label=\"{edge.Weight}\"";
+            builder.AppendLine($"{margin}{endpoints} [{color} {label}]");
         }
 
-        return builder.AppendLine("}").ToString();
+        builder.AppendLine("}");
+
+        return new DotCode(builder.ToString());
     }
 
-    private static void Visualize(this string dot, string description)
+    private readonly IReadOnlyList<MarkedEdge<bool>> _edges;
+}
+
+/// <summary>DOT code for input to GraphViz.</summary>
+/// <remarks>
+/// Currently this just represents DOT as raw text (not an AST or anything).
+/// </remarks>
+internal sealed class DotCode {
+    internal DotCode(string code) => Code = code;
+
+    internal string Code { get; }
+
+    /// <summary>Runs <c>dot</c> to create a temporary SVG file.</summary>
+    internal object ToSvg()
     {
         var dir = Path.GetTempPath();
         var guid = Guid.NewGuid();
@@ -591,7 +740,7 @@ internal static class GraphExtensions {
         var svgPath = Path.Combine(dir, $"{guid}.svg");
 
         using (var writer = File.CreateText(dotPath))
-            writer.Write(dot);
+            writer.Write(Code);
 
         var proc = new Process();
 
@@ -612,34 +761,45 @@ internal static class GraphExtensions {
         proc.WaitForExit();
         // FIXME: Look at exit code?
 
-        Util.Image(svgPath).Dump(description);
+        return Util.RawHtml(File.ReadAllText(svgPath));
     }
+
+    private object ToDump() => new TextArea(Code, columns: 40);
 }
 
 /// <summary>UI to accept a graph description and trigger a run.</summary>
 internal sealed class Controller {
-    internal Controller() : this(
+    internal Controller(params Type[] priorityQueues) : this(
         initialOrder: "7",
         initialEdges: "0 1 10\n0 6 15\n1 2 15\n2 3 12\n6 4 30\n0 2 9\n3 4 16\n4 5 9\n5 0 17\n0 2 8\n1 3 21\n5 6 94\n2 4 14\n3 5 13\n6 4 50\n4 0 20\n5 1 7\n6 3 68\n5 5 1\n",
-        initialSource: "0")
+        initialSource: "0",
+        priorityQueues)
     {
     }
 
     internal Controller(string initialOrder,
                         string initialEdges,
-                        string initialSource)
+                        string initialSource,
+                        params Type[] priorityQueues)
     {
-        _order = new TextArea(initialOrder, columns: 10);
-        _order.Rows = 1;
+        _order = new TextArea(initialOrder, columns: 10) { Rows = 1 };
+        _edges = new TextArea(initialEdges, columns: 50) { Rows = 20 };
+        _source = new TextArea(initialSource, columns: 10) { Rows = 1 };
 
-        _edges = new TextArea(initialEdges, columns: 50);
-        _edges.Rows = 20;
+        PopulatePriorityQueueControls(priorityQueues);
 
-        _source = new TextArea(initialSource, columns: 10);
-        _source.Rows = 1;
+        _parentsTable = new CheckBox("parents table", false, OnConfig);
+        _edgeSelection = new CheckBox("edge selection", false, OnConfig);
+        _dotCode = new CheckBox("DOT code", false, OnConfig);
+        _drawing = new CheckBox("graph drawing", true, OnConfig);
 
-        _buttons = new WrapPanel(new Button("Run", DoRun),
-                                 new Button("Clear", DoClear));
+        _outputConfig = new WrapPanel(_parentsTable,
+                                      _edgeSelection,
+                                      _dotCode,
+                                      _drawing);
+
+        _run = new Button("Run", OnRun);
+        _buttons = new WrapPanel(_run, new Button("Clear", OnClear));
     }
 
     internal void Show()
@@ -647,18 +807,53 @@ internal sealed class Controller {
         _order.Dump("Order");
         _edges.Dump("Edges");
         _source.Dump("Source");
+        _pqConfig.Dump("Priority queues");
+        _outputConfig.Dump("Output");
         _buttons.Dump();
     }
 
-    internal event Action<Graph, int>? Run;
+    internal event Action<Graph, int, Func<IPriorityQueue<int, long>>, string>?
+    SingleRun;
 
-    private void DoRun(Button sender)
+    internal event Action? RunsCompleted;
+
+    internal bool ParentsTableOn => _parentsTable.Checked;
+
+    internal bool EdgeSelectionOn => _edgeSelection.Checked;
+
+    internal bool DotCodeOn => _dotCode.Checked;
+
+    internal bool DrawingOn => _drawing.Checked;
+
+    private void OnRun(Button sender)
     {
-        // Always build the graph, even if no handler is registered to
-        // accept it, so that wrong input will always be reported.
-        var graph = BuildGraph();
-        var source = int.Parse(_source.Text);
-        Run?.Invoke(graph, source);
+        MaybeDisableAllControls();
+
+        try {
+            // Fail fast on malformed graph input.
+            var graph = BuildGraph();
+            var source = int.Parse(_source.Text);
+
+            // Don't respond to handler changes while running.
+            var singleRun = SingleRun;
+            var runsCompleted = RunsCompleted;
+
+            _pqConfig.Children
+                     .Cast<CheckBox>()
+                     .Where(cb => cb.Checked)
+                     .Select(cb => cb.Text)
+                     .Select(text => (supplier: _pqSuppliers[text],
+                                      label: text))
+                     .ToList() // Never respond to config changes in mid-run.
+                     .ForEach(row => singleRun?.Invoke(graph,
+                                                       source,
+                                                       row.supplier,
+                                                       row.label));
+
+            runsCompleted?.Invoke();
+        } finally {
+            MaybeEnableAllControls();
+        }
     }
 
     private Graph BuildGraph()
@@ -689,11 +884,13 @@ internal sealed class Controller {
                                 message: "wrong record length"))
                  .ToArray();
 
-    private void DoClear(Button sender)
+    private void OnClear(Button sender)
     {
         var order = _order.Text;
         var edges = _edges.Text;
         var source = _source.Text;
+
+        var config = CheckBoxes.Select(cb => (cb, cb.Checked)).ToList();
 
         Util.ClearResults();
 
@@ -701,7 +898,67 @@ internal sealed class Controller {
         _edges.Text = edges;
         _source.Text = source;
 
+        foreach (var (cb, @checked) in config) cb.Checked = @checked;
+
         Show();
+    }
+
+    private void OnConfig(CheckBox? sender)
+    {
+        static bool AnyChecked(WrapPanel panel)
+            => panel.Children.Cast<CheckBox>().Any(cb => cb.Checked);
+
+        _run.Enabled = AnyChecked(_pqConfig) && AnyChecked(_outputConfig);
+    }
+
+    void MaybeDisableAllControls()
+    {
+        if (!Configuration.DisableControlsWhileProcessing) return;
+
+        foreach (var control in Controls) control.Enabled = false;
+    }
+
+    void MaybeEnableAllControls()
+    {
+        if (!Configuration.DisableControlsWhileProcessing) return;
+
+        foreach (var control in Controls) control.Enabled = true;
+    }
+
+    private IEnumerable<Control> Controls
+        => TextAreas.Cast<Control>().Concat(CheckBoxes.Cast<Control>());
+
+    private IEnumerable<TextArea> TextAreas
+    {
+        get {
+            yield return _order;
+            yield return _edges;
+            yield return _source;
+        }
+    }
+
+    private IEnumerable<CheckBox> CheckBoxes
+        => _pqConfig.Children
+            .Concat(_outputConfig.Children)
+            .Cast<CheckBox>();
+
+    private void PopulatePriorityQueueControls(Type[] priorityQueues)
+    {
+        if (priorityQueues.Length == 0) {
+            throw new ArgumentException(
+                    paramName: nameof(priorityQueues),
+                    message: "must pass at least one priority queue type");
+        }
+
+        foreach (var type in priorityQueues) {
+            var label = type.GetInformalName();
+            var boundType = type.MakeGenericType(typeof(int), typeof(long));
+            var supplier =
+                boundType.CreateSupplier<IPriorityQueue<int, long>>();
+
+            _pqSuppliers.Add(label, supplier);
+            _pqConfig.Children.Add(new CheckBox(label, true, OnConfig));
+        }
     }
 
     private readonly TextArea _order;
@@ -710,26 +967,96 @@ internal sealed class Controller {
 
     private readonly TextArea _source;
 
+    private readonly IDictionary<string, Func<IPriorityQueue<int, long>>>
+    _pqSuppliers = new Dictionary<string, Func<IPriorityQueue<int, long>>>();
+
+    private readonly WrapPanel _pqConfig = new WrapPanel();
+
+    private readonly CheckBox _parentsTable;
+
+    private readonly CheckBox _edgeSelection;
+
+    private readonly CheckBox _dotCode;
+
+    private readonly CheckBox _drawing;
+
+    private readonly WrapPanel _outputConfig;
+
+    private readonly Button _run;
+
     private readonly WrapPanel _buttons;
 }
 
-private static void Run(Graph graph, int source)
+private static string BuildDumpLabel(string description,
+                                     IEnumerable<string> pqLabels)
 {
-    var naive = graph.ShowShortestPaths(
-                        source,
-                        () => new UnsortedArrayPriorityQueue<int, long>(),
-                        "naive priority queue");
+    const int indent = 4;
+    var margin = new string(' ', indent);
 
-    var binary = graph.ShowShortestPaths(source,
-                        () => new BinaryHeap<int, long>(),
-                        "binary minheap");
+    var builder = new StringBuilder($"{description} via:");
 
-    naive.SequenceEqual(binary).Dump("Same result?");
+    foreach (var label in pqLabels) {
+        builder.AppendLine()
+               .AppendLine() // Make extra vertical space for readability.
+               .Append(margin)
+               .Append(label.ToUpper());
+    }
+
+    return builder.ToString();
 }
 
 private static void Main()
 {
-    var controller = new Controller();
-    controller.Run += Run;
+    var controller = new Controller(typeof(UnsortedArrayPriorityQueue<,>),
+                                    typeof(BinaryHeap<,>));
+
+    var results = new List<(string label, ParentsTree parents)>();
+
+    IEnumerable<(ParentsTree parents, List<string> labels)>
+    GroupedResults()
+        => from result in results
+           group result.label by result.parents into grp
+           select (parents: grp.Key, labels: grp.ToList());
+
+    controller.SingleRun += (graph, source, supplier, label) => {
+        var parents = graph.ComputeShortestPaths(source, supplier);
+        results.Add((label, parents));
+    };
+
+    controller.RunsCompleted += () => {
+        Util.RawHtml("<hr/>").Dump();
+
+        var groups = GroupedResults().ToList();
+
+        (groups.Count switch {
+            0 => "No results at all. BUG?",
+            1 when groups[0].labels.Count > 1
+              => "YES, multiple results are consistent.",
+            1 => "Technically yes, but there is only one set of results.",
+            _ => "NO! Multiple results are inconsistent!"
+         }).Dump("Same results with all data structures?");
+
+        foreach (var (parents, labels) in groups) {
+            void Display<T>(T content, string description)
+                => content.Dump(BuildDumpLabel(description, labels),
+                                noTotals: true);
+
+            if (controller.ParentsTableOn) Display(parents, "Parents");
+
+            var selection = parents.ToEdgeSelection();
+            if (controller.EdgeSelectionOn)
+                Display(selection, "Edge selection");
+
+            const string description = "Full graph, shortest paths in red";
+
+            var dot = selection.ToDotCode(description);
+            if (controller.DotCodeOn) Display(dot, "DOT code");
+
+            if (controller.DrawingOn) Display(dot.ToSvg(), $"{description},");
+        }
+
+        results.Clear();
+    };
+
     controller.Show();
 }
