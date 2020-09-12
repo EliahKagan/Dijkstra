@@ -323,38 +323,12 @@ internal sealed class FibonacciHeap<TKey, TValue>
 
     public KeyValuePair<TKey, TValue> ExtractMin()
     {
-        // FIXME: Factor some parts out into helper methods.
-
-        if (_min == null)
+        if (Count == 0)
             throw new InvalidOperationException("Nothing to extract");
 
-        var entry = KeyValuePair.Create(_min.Key, _min.Value);
-
-        var child = _min.Child;
-        if (child != null) {
-            // Tell the children their parent has gone away.
-            do { // for each child
-                child.Parent = null;
-                child = child.Next;
-            } while (child != _min.Child);
-
-            // Make the children parents.
-            child.Prev.Next = _min.Next;
-            child.Prev = _min.Prev;
-            _min.Prev.Next = _min.Next.Prev = child;
-
-            // Set the new minimum node, consolidating any remaining nodes.
-            if (_min.Next == _min) {
-                _min = null;
-            } else {
-                _min = _min.Next;
-                Consolidate();
-            }
-        }
-
-        _map.Remove(entry.Key);
-        Debug.Assert((_min == null) == (Count == 0));
-        return entry;
+        var node = ExtractMinNode();
+        _map.Remove(node.Key);
+        return KeyValuePair.Create(node.Key, node.Value);
     }
 
     private sealed class Node {
@@ -394,18 +368,55 @@ internal sealed class FibonacciHeap<TKey, TValue>
 
     private void Insert(TKey key, TValue value)
     {
+        var node = new Node(key, value);
+        InsertNode(node);
+        _map.Add(key, node);
+    }
+
+    private void InsertNode(Node node)
+    {
         Debug.Assert((_min == null) == (Count == 0));
 
-        var node = new Node(key, value);
-
         if (_min == null) {
-            _min = new Node(key, value);
+            _min = node;
         } else {
             node.ConnectAfter(_min);
-            if (LessThan(value, _min.Value)) _min = node;
+            if (LessThan(node.Value, _min.Value)) _min = node;
+        }
+    }
+
+    private Node ExtractMinNode()
+    {
+        // FIXME: Factor some parts out into helper methods.
+        Debug.Assert(_min != null);
+        var parent = _min;
+
+        if (parent.Child != null) {
+            var child = parent.Child;
+
+            // Tell the children their root is about to go away.
+            do { // for each child
+                child.Parent = null;
+                child = child.Next;
+            } while (child != parent.Child);
+
+            // Splice the children up into the root chain.
+            child.Prev.Next = parent.Next;
+            parent.Next.Prev = child.Prev;
+            child.Prev = parent;
+            parent.Next = child;
         }
 
-        _map.Add(key, node);
+        if (parent == parent.Next) {
+            // There are no other roots, so just make the forest empty.
+            _min = null;
+        } else {
+            // Remove the minimum node and consolidate the remaning roots.
+            _min = parent.Next;
+            Consolidate();
+        }
+
+        return parent;
     }
 
     private void Consolidate()
