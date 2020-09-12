@@ -546,7 +546,11 @@ internal sealed class DotCode {
         proc.WaitForExit();
         // FIXME: Look at exit code?
 
-        return new Svg(File.ReadAllText(svgPath), 300, 566); // super buggy
+        // FIXME: LINQPad.Controls.Svg ctor takes width and height args, but:
+        // (1) I can't hard-code them, obviously.
+        // (2) Even when passed correctly, it doesn't work, and LINQPad assumes
+        //     it takes up less space, so subsequent dumps overlap with it.
+        return new Svg(File.ReadAllText(svgPath), 300, 566);
     }
 
     private object ToDump() => new TextArea(Code, columns: 40);
