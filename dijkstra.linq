@@ -517,7 +517,7 @@ internal sealed class DotCode {
     internal string Code { get; }
 
     /// <summary>Runs <c>dot</c> to create a temporary SVG file.</summary>
-    internal Svg ToSvg()
+    internal object ToSvg()
     {
         var dir = Path.GetTempPath();
         var guid = Guid.NewGuid();
@@ -546,11 +546,7 @@ internal sealed class DotCode {
         proc.WaitForExit();
         // FIXME: Look at exit code?
 
-        // FIXME: LINQPad.Controls.Svg ctor takes width and height args, but:
-        // (1) I can't hard-code them, obviously.
-        // (2) Even when passed correctly, it doesn't work, and LINQPad assumes
-        //     it takes up less space, so subsequent dumps overlap with it.
-        return new Svg(File.ReadAllText(svgPath), 300, 566);
+        return Util.RawHtml(File.ReadAllText(svgPath));
     }
 
     private object ToDump() => new TextArea(Code, columns: 40);
