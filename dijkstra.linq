@@ -567,9 +567,9 @@ internal sealed class Controller {
                         string initialSource,
                         params Type[] priorityQueues)
     {
-        _order = new TextArea(initialOrder, columns: 10) { Rows = 1 };
+        _order = new TextBox(initialOrder, width: "60px");
         _edges = new TextArea(initialEdges, columns: 50) { Rows = 20 };
-        _source = new TextArea(initialSource, columns: 10) { Rows = 1 };
+        _source = new TextBox(initialSource, width: "60px");
 
         PopulatePriorityQueueControls(priorityQueues);
 
@@ -710,10 +710,9 @@ internal sealed class Controller {
         foreach (var control in Controls) control.Enabled = true;
     }
 
-    private IEnumerable<Control> Controls
-        => TextAreas.Cast<Control>().Concat(CheckBoxes.Cast<Control>());
+    private IEnumerable<Control> Controls => TextControls.Concat(CheckBoxes);
 
-    private IEnumerable<TextArea> TextAreas
+    private IEnumerable<Control> TextControls
     {
         get {
             yield return _order;
@@ -746,11 +745,11 @@ internal sealed class Controller {
         }
     }
 
-    private readonly TextArea _order;
+    private readonly TextBox _order;
 
     private readonly TextArea _edges;
 
-    private readonly TextArea _source;
+    private readonly TextBox _source;
 
     private readonly IDictionary<string, Func<IPriorityQueue<int, long>>>
     _pqSuppliers = new Dictionary<string, Func<IPriorityQueue<int, long>>>();
