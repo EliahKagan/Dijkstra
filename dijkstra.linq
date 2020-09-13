@@ -422,7 +422,7 @@ internal sealed class FibonacciHeap<TKey, TValue>
         var roots_by_degree = new Node?[DegreeCeiling + 1];
 
         // Link trees together so no two roots have the same degree.
-        foreach (var root in GetRoots()) {
+        foreach (var root in Roots.ToList()) {
             var parent = root;
             var degree = parent.Degree;
 
@@ -446,20 +446,21 @@ internal sealed class FibonacciHeap<TKey, TValue>
                 .MinBy(node => node.Value, _comparer);
     }
 
-    /// <summary>Returns an eagerly built list of roots.</summary>
-    /// <remarks>Eager, so callers can remove roots while iterating.</remarks>
-    private IList<Node> GetRoots()
+    /// <summary>Returns a lazily built list of roots.</summary>
+    /// <remarks>
+    /// Call <c>ToList</c> if adding or removing roots during iteration.
+    /// </remarks>
+    private IEnumerable<Node> Roots
     {
-        var roots = new List<Node>();
-        if (_min == null) return roots;
+        get {
+            if (_min == null) yield break;
 
-        var root = _min;
-        do {
-            roots.Add(root);
-            root = root.Next;
-        } while (root != _min);
-
-        return roots;
+            var root = _min;
+            do {
+                yield return root;
+                root = root.Next;
+            } while (root != _min);
+        }
     }
 
     private void Link(Node parent, Node child)
@@ -496,6 +497,8 @@ internal sealed class FibonacciHeap<TKey, TValue>
     {
         // FIXME: implement this
     }
+
+    //private object ToDump() => new { Count, Roots };
 
     private Node? _min = null;
 
