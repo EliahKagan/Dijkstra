@@ -5,6 +5,7 @@
 /// <summary>Configuration options not exposed by the controller.</summary>
 internal static class Configuration {
     internal static bool DisableControlsWhileProcessing => true;
+    internal static bool OfferWrongQueue => true;
 }
 
 /// <summary>LINQ-style extension methods.</summary>
@@ -254,6 +255,20 @@ internal sealed class BinaryHeap<TKey, TValue> : IPriorityQueue<TKey, TValue>
         new List<KeyValuePair<TKey, TValue>>();
 
     private readonly IDictionary<TKey, int> _map = new Dictionary<TKey, int>();
+}
+
+/// <summary>
+/// A fake priority queue that swallows all input, for testing.
+/// </summary>
+[InformalName("wrongqueue is wrooooooong")]
+internal sealed class WrongQueue<TKey, TValue> : IPriorityQueue<TKey, TValue> {
+    public int Count => 0;
+
+    public bool InsertOrDecrease(TKey key, TValue value) => false;
+
+    public KeyValuePair<TKey, TValue> ExtractMin()
+        => throw new InvalidOperationException(
+            "Can't extract from WrongQueue, which only pretends to take input");
 }
 
 /// <summary>An edge in a weighted directed graph.</summary>
@@ -554,7 +569,7 @@ internal sealed class DotCode {
 
 /// <summary>UI to accept a graph description and trigger a run.</summary>
 internal sealed class Controller {
-    internal Controller(params Type[] priorityQueues) : this(
+    internal Controller(IList<Type> priorityQueues) : this(
         initialOrder: "7",
         initialEdges: "0 1 10\n0 6 15\n1 2 15\n2 3 12\n6 4 30\n0 2 9\n3 4 16\n4 5 9\n5 0 17\n0 2 8\n1 3 21\n5 6 94\n2 4 14\n3 5 13\n6 4 50\n4 0 20\n5 1 7\n6 3 68\n5 5 1\n",
         initialSource: "0",
@@ -565,7 +580,7 @@ internal sealed class Controller {
     internal Controller(string initialOrder,
                         string initialEdges,
                         string initialSource,
-                        params Type[] priorityQueues)
+                        IList<Type> priorityQueues)
     {
         _order = new TextBox(initialOrder, width: "60px");
         _edges = new TextArea(initialEdges, columns: 50) { Rows = 20 };
@@ -613,7 +628,6 @@ internal sealed class Controller {
     private void OnRun(Button sender)
     {
         MaybeDisableAllControls();
-
         try {
             // Fail fast on malformed graph input.
             var graph = BuildGraph();
@@ -726,9 +740,9 @@ internal sealed class Controller {
             .Concat(_outputConfig.Children)
             .Cast<CheckBox>();
 
-    private void PopulatePriorityQueueControls(Type[] priorityQueues)
+    private void PopulatePriorityQueueControls(IList<Type> priorityQueues)
     {
-        if (priorityQueues.Length == 0) {
+        if (priorityQueues.Count == 0) {
             throw new ArgumentException(
                     paramName: nameof(priorityQueues),
                     message: "must pass at least one priority queue type");
@@ -771,6 +785,20 @@ internal sealed class Controller {
     private readonly WrapPanel _buttons;
 }
 
+// TODO: Rework Controller construction instead of having this method.
+private static Controller BuildController()
+{
+    var priorityQueues = new List<Type> {
+        typeof(UnsortedArrayPriorityQueue<,>),
+        typeof(BinaryHeap<,>)
+    };
+
+    if (Configuration.OfferWrongQueue)
+        priorityQueues.Add(typeof(WrongQueue<,>));
+
+    return new Controller(priorityQueues);
+}
+
 private static string BuildDumpLabel(string description,
                                      IEnumerable<string> pqLabels)
 {
@@ -791,9 +819,7 @@ private static string BuildDumpLabel(string description,
 
 private static void Main()
 {
-    var controller = new Controller(typeof(UnsortedArrayPriorityQueue<,>),
-                                    typeof(BinaryHeap<,>));
-
+    var controller = BuildController();
     var results = new List<(string label, ParentsTree parents)>();
 
     IEnumerable<(ParentsTree parents, List<string> labels)>
