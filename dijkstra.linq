@@ -459,11 +459,10 @@ internal sealed class FibonacciHeap<TKey, TValue>
         //}
 
         // Reattach the linked list of roots, at the minimum node.
-        // FIXME: Only consider nodes that are still roots!
         // TODO: Consider using EnumerableExtensions.MinBy.
         foreach (var root in by_degree) {
             if (root == null) continue;
-
+            Debug.Assert(root.Parent == null); // FIXME: remove after testing
             if (_min == null || LessThan(root.Value, _min.Value)) _min = root;
         }
     }
