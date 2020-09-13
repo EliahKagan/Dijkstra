@@ -328,6 +328,7 @@ internal sealed class FibonacciHeap<TKey, TValue>
 
         var node = ExtractMinNode();
         _map.Remove(node.Key);
+        this.Dump(noTotals: true);
         return KeyValuePair.Create(node.Key, node.Value);
     }
 
