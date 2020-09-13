@@ -110,7 +110,7 @@ internal sealed class FibonacciHeap<TKey, TValue>
 
     private Node ExtractMinNode()
     {
-        // FIXME: Factor some parts out into helper methods.
+        // TODO: Factor some parts out into helper methods.
         Debug.Assert(_min != null);
         var parent = _min;
 
@@ -147,10 +147,6 @@ internal sealed class FibonacciHeap<TKey, TValue>
 
     private void Consolidate()
     {
-        // TODO: When a root is made a child, remove it from the linked list of
-        // roots immediately, rather than rebuild the linked list in a separate
-        // pass. [FIXME: Check that the recent change to Link() does this.]
-
         var by_degree = new Node?[DegreeCeiling + 1];
 
         // Link trees together so no two roots have the same degree.
@@ -172,26 +168,11 @@ internal sealed class FibonacciHeap<TKey, TValue>
             by_degree[degree] = parent;
         }
 
-        // Rebuild the linked list of roots.
-        //_min = null;
-        //foreach (var root in by_degree) {
-        //    if (root == null) continue;
-        //
-        //    if (_min == null) {
-        //        root.Disconnect();
-        //        _min = root;
-        //    } else {
-        //        root.ConnectAfter(_min);
-        //        if (LessThan(root.Value, _min.Value)) _min = root;
-        //    }
-        //}
-
         // Reattach the linked list of roots, at the minimum node.
-        // FIXME: Only consider nodes that are still roots!
         // TODO: Consider using EnumerableExtensions.MinBy.
         foreach (var root in by_degree) {
             if (root == null) continue;
-
+            Debug.Assert(root.Parent == null); // FIXME: remove after testing
             if (_min == null || LessThan(root.Value, _min.Value)) _min = root;
         }
     }

@@ -382,7 +382,7 @@ internal sealed class FibonacciHeap<TKey, TValue>
 
     private Node ExtractMinNode()
     {
-        // FIXME: Factor some parts out into helper methods.
+        // TODO: Factor some parts out into helper methods.
         Debug.Assert(_min != null);
         var parent = _min;
 
@@ -390,7 +390,6 @@ internal sealed class FibonacciHeap<TKey, TValue>
             var child = parent.Child;
 
             // Tell the children their root is about to go away.
-            // TODO: Can/should GetRoots/Roots be used here?
             do { // for each child
                 child.Parent = null;
                 child = child.Next;
