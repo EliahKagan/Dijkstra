@@ -390,6 +390,7 @@ internal sealed class FibonacciHeap<TKey, TValue>
             var child = parent.Child;
 
             // Tell the children their root is about to go away.
+            // TODO: Can/should GetRoots/Roots be used here?
             do { // for each child
                 child.Parent = null;
                 child = child.Next;
@@ -419,10 +420,6 @@ internal sealed class FibonacciHeap<TKey, TValue>
 
     private void Consolidate()
     {
-        // TODO: When a root is made a child, remove it from the linked list of
-        // roots immediately, rather than rebuild the linked list in a separate
-        // pass. [FIXME: Check that the recent change to Link() does this.]
-
         var by_degree = new Node?[DegreeCeiling + 1];
 
         // Link trees together so no two roots have the same degree.
@@ -443,20 +440,6 @@ internal sealed class FibonacciHeap<TKey, TValue>
 
             by_degree[degree] = parent;
         }
-
-        // Rebuild the linked list of roots.
-        //_min = null;
-        //foreach (var root in by_degree) {
-        //    if (root == null) continue;
-        //
-        //    if (_min == null) {
-        //        root.Disconnect();
-        //        _min = root;
-        //    } else {
-        //        root.ConnectAfter(_min);
-        //        if (LessThan(root.Value, _min.Value)) _min = root;
-        //    }
-        //}
 
         // Reattach the linked list of roots, at the minimum node.
         // TODO: Consider using EnumerableExtensions.MinBy.
