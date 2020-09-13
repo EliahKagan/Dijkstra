@@ -350,6 +350,28 @@ internal sealed class FibonacciHeap<TKey, TValue>
         internal int Degree { get; set; } = 0;
 
         internal bool Mark { get; set; } = false;
+
+        private object ToDump() => new {
+            Key,
+            Value,
+            Degree,
+            Mark,
+            Children = NodesInChain(Child)
+        };
+    }
+
+    /// <summary>Yields this node (if any) and its siblings, lazily.</summary>
+    /// <remarks>
+    /// Call <c>ToList</c> if adding or removing nodes during iteration.
+    /// </remarks>
+    private static IEnumerable<Node> NodesInChain(Node? node)
+    {
+        if (node == null) yield break;
+
+        yield return node;
+
+        for (var sibling = node.Next; sibling != node; sibling = sibling.Next)
+            yield return sibling;
     }
 
     private static readonly double GoldenRatio = (1.0 + Math.Sqrt(5.0)) / 2.0;
@@ -422,7 +444,7 @@ internal sealed class FibonacciHeap<TKey, TValue>
         var roots_by_degree = new Node?[DegreeCeiling + 1];
 
         // Link trees together so no two roots have the same degree.
-        foreach (var root in Roots.ToList()) {
+        foreach (var root in NodesInChain(_min).ToList()) {
             var parent = root;
             var degree = parent.Degree;
 
@@ -444,23 +466,6 @@ internal sealed class FibonacciHeap<TKey, TValue>
         _min = roots_by_degree
                 .OfType<Node>() // skip nulls
                 .MinBy(node => node.Value, _comparer);
-    }
-
-    /// <summary>Returns a lazily built list of roots.</summary>
-    /// <remarks>
-    /// Call <c>ToList</c> if adding or removing roots during iteration.
-    /// </remarks>
-    private IEnumerable<Node> Roots
-    {
-        get {
-            if (_min == null) yield break;
-
-            var root = _min;
-            do {
-                yield return root;
-                root = root.Next;
-            } while (root != _min);
-        }
     }
 
     private void Link(Node parent, Node child)
@@ -498,7 +503,7 @@ internal sealed class FibonacciHeap<TKey, TValue>
         // FIXME: implement this
     }
 
-    //private object ToDump() => new { Count, Roots };
+    private object ToDump() => new { Count, Roots = NodesInChain(_min) };
 
     private Node? _min = null;
 
