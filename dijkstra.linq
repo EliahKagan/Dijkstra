@@ -5,6 +5,7 @@
 /// <summary>Configuration options not exposed by the controller.</summary>
 internal static class Configuration {
     internal static bool DisableControlsWhileProcessing => true;
+    internal static bool DebugFibonacciHeap => false;
 }
 
 /// <summary>LINQ-style extension methods.</summary>
@@ -328,7 +329,7 @@ internal sealed class FibonacciHeap<TKey, TValue>
 
         var node = ExtractMinNode();
         _map.Remove(node.Key);
-        this.Dump(noTotals: true);
+        if (Configuration.DebugFibonacciHeap) this.Dump(noTotals: true);
         return KeyValuePair.Create(node.Key, node.Value);
     }
 
