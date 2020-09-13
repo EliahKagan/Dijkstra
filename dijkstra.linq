@@ -440,6 +440,7 @@ internal sealed class FibonacciHeap<TKey, TValue>
                     (parent, child) = (child, parent);
 
                 Link(parent, child);
+                by_degree[degree++] = null;
             }
 
             by_degree[degree] = parent;
