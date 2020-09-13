@@ -48,12 +48,12 @@ internal sealed class FibonacciHeap<TKey, TValue>
 
         return true;
     }
-    
+
     public KeyValuePair<TKey, TValue> ExtractMin()
     {
         if (Count == 0)
             throw new InvalidOperationException("Nothing to extract");
-        
+
         var node = ExtractMinNode();
         _map.Remove(node.Key);
         return KeyValuePair.Create(node.Key, node.Value);
@@ -63,37 +63,28 @@ internal sealed class FibonacciHeap<TKey, TValue>
         internal Node(TKey key, TValue value)
             => (Key, Value, Prev, Next) = (key, value, this, this);
 
-        internal void Disconnect() => Prev = Next = this;
+        internal TKey Key { get; }
 
-        internal void ConnectAfter(Node prev)
-        {
-            Prev = prev;
-            Next = prev.Next;
-            Prev.Next = Next.Prev = this;
-        }
+        internal TValue Value { get; set; }
 
-        public TKey Key { get; }
+        internal Node? Parent { get; set; } = null;
 
-        public TValue Value { get; set; }
+        internal Node Prev { get; set; }
 
-        public Node? Parent { get; set; } = null;
+        internal Node Next { get; set; }
 
-        public Node Prev { get; set; }
+        internal Node? Child { get; set; } = null;
 
-        public Node Next { get; set; }
+        internal int Degree { get; set; } = 0;
 
-        public Node? Child { get; set; } = null;
-
-        public int Degree { get; set; } = 0;
-
-        public bool Mark { get; set; } = false;
+        internal bool Mark { get; set; } = false;
     }
 
     private static readonly double GoldenRatio = (1.0 + Math.Sqrt(5.0)) / 2.0;
 
     /// <summary>The maximum degree is no more than this.</summary>
     private int DegreeCeiling => (int)Math.Log(a: Count, newBase: GoldenRatio);
-    
+
     private void Insert(TKey key, TValue value)
     {
         var node = new Node(key, value);
@@ -104,21 +95,25 @@ internal sealed class FibonacciHeap<TKey, TValue>
     private void InsertNode(Node node)
     {
         Debug.Assert((_min == null) == (Count == 0));
-        
+        Debug.Assert(node.Next == node && node.Parent == null);
+
         if (_min == null) {
             _min = node;
         } else {
-            node.ConnectAfter(_min);
+            node.Prev = _min;
+            node.Next = _min.Next;
+            node.Prev.Next = node.Next.Prev = node;
+
             if (LessThan(node.Value, _min.Value)) _min = node;
         }
     }
-    
+
     private Node ExtractMinNode()
     {
         // FIXME: Factor some parts out into helper methods.
         Debug.Assert(_min != null);
         var parent = _min;
-        
+
         if (parent.Child != null) {
             var child = parent.Child;
 
@@ -134,87 +129,70 @@ internal sealed class FibonacciHeap<TKey, TValue>
             child.Prev = parent;
             parent.Next = child;
         }
-        
+
         if (parent == parent.Next) {
             // There are no other roots, so just make the forest empty.
-            Console.WriteLine("No other roots."); // FIXME: remove
             _min = null;
         } else {
-            // Remove the minimum node and consolidate the remaning roots.
-            _min = parent.Next;
-            Console.WriteLine("Consolidating."); // FIXME: remove
+            // Remove the minimum node.
+            _min = parent.Prev.Next = parent.Next;
+            parent.Next.Prev = parent.Prev;
+            parent.Prev = parent.Next = parent; // to avoid confusion
+
             Consolidate();
-            Console.WriteLine("Done consolidating."); // FIXME: remove
         }
-        
-        _min.Dump();
+
         return parent;
     }
 
     private void Consolidate()
     {
         // TODO: When a root is made a child, remove it from the linked list of
-        // roots immediately, rather than rebuilding the linked list in a
-        // separate pass.
+        // roots immediately, rather than rebuild the linked list in a separate
+        // pass. [FIXME: Check that the recent change to Link() does this.]
 
-        var by_degree = new Node?[DegreeCeiling + 2]; // FIXME: +1? +2?
+        var by_degree = new Node?[DegreeCeiling + 1];
 
         // Link trees together so no two roots have the same degree.
         foreach (var root in GetRoots()) {
             var parent = root;
             var degree = parent.Degree;
-            
-            while (by_degree[degree] != null) {
-                var child = by_degree[degree]!; // FIXME: do this better
-                
+
+            for (; ; ) {
+                var child = by_degree[degree];
+                if (child == null) break;
+
                 if (LessThan(child.Value, parent.Value))
                     (parent, child) = (child, parent);
-                
+
                 Link(parent, child);
                 by_degree[degree++] = null;
             }
-            
+
             by_degree[degree] = parent;
         }
-        
-        //foreach (var root in GetRoots()) {
-        //    var parent = root;
-        //    var degree = parent.Degree;
-        //
-        //    for (; ; ) {
-        //        var child = by_degree[degree];
-        //        if (child == null) break;
-        //
-        //        if (LessThan(child.Value, parent.Value))
-        //            (parent, child) = (child, parent);
-        //
-        //        Link(parent, child);
-        //    }
-        //
-        //    by_degree[degree] = parent;
-        //}
 
         // Rebuild the linked list of roots.
-        Console.WriteLine("Rebuilding root list."); // FIXME: remove
-        _min = null;
+        //_min = null;
+        //foreach (var root in by_degree) {
+        //    if (root == null) continue;
+        //
+        //    if (_min == null) {
+        //        root.Disconnect();
+        //        _min = root;
+        //    } else {
+        //        root.ConnectAfter(_min);
+        //        if (LessThan(root.Value, _min.Value)) _min = root;
+        //    }
+        //}
+
+        // Reattach the linked list of roots, at the minimum node.
+        // FIXME: Only consider nodes that are still roots!
+        // TODO: Consider using EnumerableExtensions.MinBy.
         foreach (var root in by_degree) {
             if (root == null) continue;
-            
-            // FIXME: Should Disconnect() and ConnectAfter() be responsible
-            //        for this?
-            if (root.Next != null) {
-                Console.WriteLine("Splicing out."); // FIXME: remove
-                root.Next.Prev = root.Prev;
-                root.Prev.Next = root.Next;
-            }
 
-            if (_min == null) {
-                root.Disconnect();
-                _min = root;
-            } else {
-                root.ConnectAfter(_min);
-                if (LessThan(root.Value, _min.Value)) _min = root;
-            }
+            if (_min == null || LessThan(root.Value, _min.Value)) _min = root;
         }
     }
 
@@ -222,7 +200,6 @@ internal sealed class FibonacciHeap<TKey, TValue>
     /// <remarks>Eager, so callers can remove roots while iterating.</remarks>
     private IList<Node> GetRoots()
     {
-        Console.WriteLine("Getting roots."); // FIXME: remove
         var roots = new List<Node>();
         if (_min == null) return roots;
 
@@ -232,25 +209,24 @@ internal sealed class FibonacciHeap<TKey, TValue>
             root = root.Next;
         } while (root != _min);
 
-        Console.WriteLine("Done getting roots."); // FIXME: remove
         return roots;
     }
 
-    private void Link(Node parent, Node child) // FIXME: Hook up .Parent?
+    private void Link(Node parent, Node child)
     {
-        Debug.Assert(child.Parent == null);
-        Debug.Assert(child.Next != child);
-        
+        Debug.Assert(parent.Parent == null && child.Parent == null);
+
         child.Prev.Next = child.Next;
         child.Next.Prev = child.Prev;
+        child.Parent = parent;
         child.Mark = false;
 
         if (parent.Child == null) {
-            // FIXME: Does this break a linked list of siblings?
-            child.Disconnect();
-            parent.Child = child;
+            parent.Child = child.Prev = child.Next = child;
         } else {
-            child.ConnectAfter(parent.Child);
+            child.Prev = parent.Child;
+            child.Next = parent.Child.Next;
+            child.Prev.Next = child.Next.Prev = child;
         }
 
         ++parent.Degree;
@@ -287,12 +263,17 @@ private static void Main()
     IPriorityQueue<string, int> pq = new FibonacciHeap<string, int>();
     pq.InsertOrDecrease("bar", 48);
     pq.InsertOrDecrease("foo", 23);
-    pq.Count.Dump();
-    pq.ExtractMin().Dump();
-    
-    pq.Count.Dump();
-    pq.ExtractMin().Dump();
+    pq.InsertOrDecrease("baz", 90);
     pq.Count.Dump();
     pq.ExtractMin().Dump();
     pq.Count.Dump();
+    pq.InsertOrDecrease("quux", 56);
+    pq.Count.Dump();
+    pq.ExtractMin().Dump();
+    pq.Count.Dump();
+    pq.ExtractMin().Dump();
+    pq.Count.Dump();
+    pq.ExtractMin().Dump();
+    pq.Count.Dump();
+    pq.ExtractMin().Dump(); // should throw
 }

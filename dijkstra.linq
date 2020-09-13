@@ -335,15 +335,6 @@ internal sealed class FibonacciHeap<TKey, TValue>
         internal Node(TKey key, TValue value)
             => (Key, Value, Prev, Next) = (key, value, this, this);
 
-        internal void Disconnect() => Prev = Next = this;
-
-        internal void ConnectAfter(Node prev)
-        {
-            Prev = prev;
-            Next = prev.Next;
-            Prev.Next = Next.Prev = this;
-        }
-
         internal TKey Key { get; }
 
         internal TValue Value { get; set; }
@@ -376,11 +367,15 @@ internal sealed class FibonacciHeap<TKey, TValue>
     private void InsertNode(Node node)
     {
         Debug.Assert((_min == null) == (Count == 0));
+        Debug.Assert(node.Next == node && node.Parent == null);
 
         if (_min == null) {
             _min = node;
         } else {
-            node.ConnectAfter(_min);
+            node.Prev = _min;
+            node.Next = _min.Next;
+            node.Prev.Next = node.Next.Prev = node;
+
             if (LessThan(node.Value, _min.Value)) _min = node;
         }
     }
@@ -411,8 +406,11 @@ internal sealed class FibonacciHeap<TKey, TValue>
             // There are no other roots, so just make the forest empty.
             _min = null;
         } else {
-            // Remove the minimum node and consolidate the remaning roots.
-            _min = parent.Next;
+            // Remove the minimum node.
+            _min = parent.Prev.Next = parent.Next;
+            parent.Next.Prev = parent.Prev;
+            parent.Prev = parent.Next = parent; // to avoid confusion
+
             Consolidate();
         }
 
@@ -422,8 +420,8 @@ internal sealed class FibonacciHeap<TKey, TValue>
     private void Consolidate()
     {
         // TODO: When a root is made a child, remove it from the linked list of
-        // roots immediately, rather than rebuilding the linked list in a
-        // separate pass.
+        // roots immediately, rather than rebuild the linked list in a separate
+        // pass. [FIXME: Check that the recent change to Link() does this.]
 
         var by_degree = new Node?[DegreeCeiling + 1];
 
@@ -447,17 +445,26 @@ internal sealed class FibonacciHeap<TKey, TValue>
         }
 
         // Rebuild the linked list of roots.
-        _min = null;
+        //_min = null;
+        //foreach (var root in by_degree) {
+        //    if (root == null) continue;
+        //
+        //    if (_min == null) {
+        //        root.Disconnect();
+        //        _min = root;
+        //    } else {
+        //        root.ConnectAfter(_min);
+        //        if (LessThan(root.Value, _min.Value)) _min = root;
+        //    }
+        //}
+
+        // Reattach the linked list of roots, at the minimum node.
+        // FIXME: Only consider nodes that are still roots!
+        // TODO: Consider using EnumerableExtensions.MinBy.
         foreach (var root in by_degree) {
             if (root == null) continue;
 
-            if (_min == null) {
-                root.Disconnect();
-                _min = root;
-            } else {
-                root.ConnectAfter(_min);
-                if (LessThan(root.Value, _min.Value)) _min = root;
-            }
+            if (_min == null || LessThan(root.Value, _min.Value)) _min = root;
         }
     }
 
@@ -479,16 +486,19 @@ internal sealed class FibonacciHeap<TKey, TValue>
 
     private void Link(Node parent, Node child)
     {
+        Debug.Assert(parent.Parent == null && child.Parent == null);
+
         child.Prev.Next = child.Next;
         child.Next.Prev = child.Prev;
+        child.Parent = parent;
         child.Mark = false;
 
         if (parent.Child == null) {
-            // FIXME: Does this break a linked list of siblings?
-            child.Disconnect();
-            parent.Child = child;
+            parent.Child = child.Prev = child.Next = child;
         } else {
-            child.ConnectAfter(parent.Child);
+            child.Prev = parent.Child;
+            child.Next = parent.Child.Next;
+            child.Prev.Next = child.Next.Prev = child;
         }
 
         ++parent.Degree;
