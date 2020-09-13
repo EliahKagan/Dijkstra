@@ -311,7 +311,7 @@ internal sealed class FibonacciHeap<TKey, TValue>
     {
         if (!_map.TryGetValue(key, out var node)) {
             Insert(key, value);
-        } else if (LessThan(value, node.Value)) {
+        } else if (_comparer.Compare(value, node.Value) < 0) {
             node.Value = value;
             Decrease(node);
         } else {
@@ -376,7 +376,7 @@ internal sealed class FibonacciHeap<TKey, TValue>
             node.Next = _min.Next;
             node.Prev.Next = node.Next.Prev = node;
 
-            if (LessThan(node.Value, _min.Value)) _min = node;
+            if (_comparer.Compare(node.Value, _min.Value) < 0) _min = node;
         }
     }
 
@@ -419,7 +419,7 @@ internal sealed class FibonacciHeap<TKey, TValue>
 
     private void Consolidate()
     {
-        var by_degree = new Node?[DegreeCeiling + 1];
+        var roots_by_degree = new Node?[DegreeCeiling + 1];
 
         // Link trees together so no two roots have the same degree.
         foreach (var root in GetRoots()) {
@@ -427,26 +427,23 @@ internal sealed class FibonacciHeap<TKey, TValue>
             var degree = parent.Degree;
 
             for (; ; ) {
-                var child = by_degree[degree];
+                var child = roots_by_degree[degree];
                 if (child == null) break;
 
-                if (LessThan(child.Value, parent.Value))
+                if (_comparer.Compare(child.Value, parent.Value) < 0)
                     (parent, child) = (child, parent);
 
                 Link(parent, child);
-                by_degree[degree++] = null;
+                roots_by_degree[degree++] = null;
             }
 
-            by_degree[degree] = parent;
+            roots_by_degree[degree] = parent;
         }
 
         // Reattach the linked list of roots, at the minimum node.
-        // TODO: Consider using EnumerableExtensions.MinBy.
-        foreach (var root in by_degree) {
-            if (root == null) continue;
-            Debug.Assert(root.Parent == null); // FIXME: remove after testing
-            if (_min == null || LessThan(root.Value, _min.Value)) _min = root;
-        }
+        _min = roots_by_degree
+                .OfType<Node>() // skip nulls
+                .MinBy(node => node.Value, _comparer);
     }
 
     /// <summary>Returns an eagerly built list of roots.</summary>
@@ -499,9 +496,6 @@ internal sealed class FibonacciHeap<TKey, TValue>
     {
         // FIXME: implement this
     }
-
-    private bool LessThan(TValue lhs, TValue rhs)
-        => _comparer.Compare(lhs, rhs) < 0;
 
     private Node? _min = null;
 
