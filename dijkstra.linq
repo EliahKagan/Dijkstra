@@ -257,42 +257,6 @@ internal sealed class BinaryHeap<TKey, TValue> : IPriorityQueue<TKey, TValue>
     private readonly IDictionary<TKey, int> _map = new Dictionary<TKey, int>();
 }
 
-/// <summary>An edge in a weighted directed graph.</summary>
-internal readonly struct Edge {
-    internal Edge(int src, int dest, int weight)
-        => (Src, Dest, Weight) = (src, dest, weight);
-
-    internal int Src { get; }
-
-    internal int Dest { get; }
-
-    internal int Weight { get; }
-}
-
-/// <summary>Convenience functions for marked edges.</summary>
-internal static class MarkedEdge {
-    internal static MarkedEdge<T> Create<T>(Edge edge, T mark)
-        => new MarkedEdge<T>(edge, mark);
-}
-
-/// <summary>A marked edge in a weighted directed graph.</summary>
-internal readonly struct MarkedEdge<T> {
-    internal MarkedEdge(Edge edge, T mark)
-        => (_edge, Mark) = (edge, mark);
-
-    internal int Src => _edge.Src;
-
-    internal int Dest => _edge.Dest;
-
-    internal int Weight => _edge.Weight;
-
-    internal T Mark { get; }
-
-    private object ToDump() => new { Src, Dest, Weight, Mark };
-
-    private readonly Edge _edge;
-}
-
 /// <summary>
 /// A Fibonacci minheap providing priority queue operations for Prim's and
 /// Dijkstra's algorithms.
@@ -513,6 +477,42 @@ internal sealed class FibonacciHeap<TKey, TValue>
         new Dictionary<TKey, Node>();
 
     private readonly IComparer<TValue> _comparer;
+}
+
+/// <summary>An edge in a weighted directed graph.</summary>
+internal readonly struct Edge {
+    internal Edge(int src, int dest, int weight)
+        => (Src, Dest, Weight) = (src, dest, weight);
+
+    internal int Src { get; }
+
+    internal int Dest { get; }
+
+    internal int Weight { get; }
+}
+
+/// <summary>Convenience functions for marked edges.</summary>
+internal static class MarkedEdge {
+    internal static MarkedEdge<T> Create<T>(Edge edge, T mark)
+        => new MarkedEdge<T>(edge, mark);
+}
+
+/// <summary>A marked edge in a weighted directed graph.</summary>
+internal readonly struct MarkedEdge<T> {
+    internal MarkedEdge(Edge edge, T mark)
+        => (_edge, Mark) = (edge, mark);
+
+    internal int Src => _edge.Src;
+
+    internal int Dest => _edge.Dest;
+
+    internal int Weight => _edge.Weight;
+
+    internal T Mark { get; }
+
+    private object ToDump() => new { Src, Dest, Weight, Mark };
+
+    private readonly Edge _edge;
 }
 
 /// <summary>
