@@ -5,7 +5,7 @@
 /// <summary>Configuration options not exposed by the controller.</summary>
 internal static class Configuration {
     internal static bool DisableControlsWhileProcessing => true;
-    internal static bool OfferWrongQueue => true;
+    internal static bool OfferWrongQueue => false;
 }
 
 /// <summary>LINQ-style extension methods.</summary>
