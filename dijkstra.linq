@@ -569,37 +569,64 @@ internal sealed class DotCode {
 
 /// <summary>UI to accept a graph description and trigger a run.</summary>
 internal sealed class Controller {
-    internal Controller(IList<Type> priorityQueues) : this(
-        initialOrder: "7",
-        initialEdges: "0 1 10\n0 6 15\n1 2 15\n2 3 12\n6 4 30\n0 2 9\n3 4 16\n4 5 9\n5 0 17\n0 2 8\n1 3 21\n5 6 94\n2 4 14\n3 5 13\n6 4 50\n4 0 20\n5 1 7\n6 3 68\n5 5 1\n",
-        initialSource: "0",
-        priorityQueues)
-    {
-    }
+    internal sealed class Builder {
+        internal Builder Order(int order)
+            => SetField(nameof(order), ref _order, order);
 
-    internal Controller(string initialOrder,
-                        string initialEdges,
-                        string initialSource,
-                        IList<Type> priorityQueues)
-    {
-        _order = new TextBox(initialOrder, width: "60px");
-        _edges = new TextArea(initialEdges, columns: 50) { Rows = 20 };
-        _source = new TextBox(initialSource, width: "60px");
+        internal Builder Edge(int src, int dest, int weight)
+        {
+            _edges.Add(new Edge(src, dest, weight));
+            return this;
+        }
 
-        PopulatePriorityQueueControls(priorityQueues);
+        internal Builder Source(int source)
+            => SetField(nameof(source), ref _source, source);
 
-        _parentsTable = new CheckBox("parents table", false, OnConfig);
-        _edgeSelection = new CheckBox("edge selection", false, OnConfig);
-        _dotCode = new CheckBox("DOT code", false, OnConfig);
-        _drawing = new CheckBox("graph drawing", true, OnConfig);
+        internal Builder PQ(Type type, bool selected = true)
+        {
+            _priorityQueues.Add(new PriorityQueueItem(type, selected));
+            return this;
+        }
 
-        _outputConfig = new WrapPanel(_parentsTable,
-                                      _edgeSelection,
-                                      _dotCode,
-                                      _drawing);
+        internal Controller Build()
+            => new Controller(initialOrder: GetField("order", _order),
+                              initialEdges: BuildEdgesText(),
+                              initialSource: GetField("source", _source),
+                              priorityQueues: _priorityQueues);
 
-        _run = new Button("Run", OnRun);
-        _buttons = new WrapPanel(_run, new Button("Clear", OnClear));
+        private Builder SetField(string name, ref int? field, int value)
+        {
+            if (field != null) {
+                throw new ArgumentException(
+                        paramName: name,
+                        message: "property already set");
+            }
+
+            field = value;
+            return this;
+        }
+
+        private string GetField(string name, int? field)
+            => field?.ToString()
+                ?? throw new InvalidOperationException(
+                        $"can't build with {name} property unset");
+
+        private string BuildEdgesText()
+        {
+            static string MakeLine(Edge edge)
+                => $"{edge.Src} {edge.Dest} {edge.Weight}";
+
+            return string.Join(Environment.NewLine, _edges.Select(MakeLine));
+        }
+
+        private int? _order = null;
+
+        private readonly IList<Edge> _edges = new List<Edge>();
+
+        private int? _source = null;
+
+        private readonly IList<PriorityQueueItem> _priorityQueues =
+            new List<PriorityQueueItem>();
     }
 
     internal void Show()
@@ -624,6 +651,60 @@ internal sealed class Controller {
     internal bool DotCodeOn => _dotCode.Checked;
 
     internal bool DrawingOn => _drawing.Checked;
+
+    private readonly struct PriorityQueueItem {
+        internal PriorityQueueItem(Type type, bool selected)
+            => (Type, Selected) = (type, selected);
+
+        internal Type Type { get; }
+
+        internal bool Selected { get; }
+    }
+
+    private Controller(string initialOrder,
+                        string initialEdges,
+                        string initialSource,
+                        IList<PriorityQueueItem> priorityQueues)
+    {
+        _order = new TextBox(initialOrder, width: "60px");
+        _edges = new TextArea(initialEdges, columns: 50) { Rows = 20 };
+        _source = new TextBox(initialSource, width: "60px");
+
+        PopulatePriorityQueueControls(priorityQueues);
+
+        _parentsTable = new CheckBox("parents table", false, OnConfig);
+        _edgeSelection = new CheckBox("edge selection", false, OnConfig);
+        _dotCode = new CheckBox("DOT code", false, OnConfig);
+        _drawing = new CheckBox("graph drawing", true, OnConfig);
+
+        _outputConfig = new WrapPanel(_parentsTable,
+                                      _edgeSelection,
+                                      _dotCode,
+                                      _drawing);
+
+        _run = new Button("Run", OnRun);
+        _buttons = new WrapPanel(_run, new Button("Clear", OnClear));
+    }
+
+    private void
+    PopulatePriorityQueueControls(IList<PriorityQueueItem> priorityQueues)
+    {
+        if (priorityQueues.Count == 0) {
+            throw new ArgumentException(
+                    paramName: nameof(priorityQueues),
+                    message: "must pass at least one priority queue type");
+        }
+
+        foreach (var pq in priorityQueues) {
+            var label = pq.Type.GetInformalName();
+            var boundType = pq.Type.MakeGenericType(typeof(int), typeof(long));
+            var supplier =
+                boundType.CreateSupplier<IPriorityQueue<int, long>>();
+
+            _pqSuppliers.Add(label, supplier);
+            _pqConfig.Children.Add(new CheckBox(label, pq.Selected, OnConfig));
+        }
+    }
 
     private void OnRun(Button sender)
     {
@@ -697,7 +778,7 @@ internal sealed class Controller {
         _edges.Text = edges;
         _source.Text = source;
 
-        foreach (var (cb, @checked) in config) cb.Checked = @checked;
+        foreach (var (cb, selected) in config) cb.Checked = selected;
 
         Show();
     }
@@ -712,16 +793,14 @@ internal sealed class Controller {
 
     void MaybeDisableAllControls()
     {
-        if (!Configuration.DisableControlsWhileProcessing) return;
-
-        foreach (var control in Controls) control.Enabled = false;
+        if (Configuration.DisableControlsWhileProcessing)
+            foreach (var control in Controls) control.Enabled = false;
     }
 
     void MaybeEnableAllControls()
     {
-        if (!Configuration.DisableControlsWhileProcessing) return;
-
-        foreach (var control in Controls) control.Enabled = true;
+        if (Configuration.DisableControlsWhileProcessing)
+            foreach (var control in Controls) control.Enabled = true;
     }
 
     private IEnumerable<Control> Controls => TextControls.Concat(CheckBoxes);
@@ -739,25 +818,6 @@ internal sealed class Controller {
         => _pqConfig.Children
             .Concat(_outputConfig.Children)
             .Cast<CheckBox>();
-
-    private void PopulatePriorityQueueControls(IList<Type> priorityQueues)
-    {
-        if (priorityQueues.Count == 0) {
-            throw new ArgumentException(
-                    paramName: nameof(priorityQueues),
-                    message: "must pass at least one priority queue type");
-        }
-
-        foreach (var type in priorityQueues) {
-            var label = type.GetInformalName();
-            var boundType = type.MakeGenericType(typeof(int), typeof(long));
-            var supplier =
-                boundType.CreateSupplier<IPriorityQueue<int, long>>();
-
-            _pqSuppliers.Add(label, supplier);
-            _pqConfig.Children.Add(new CheckBox(label, true, OnConfig));
-        }
-    }
 
     private readonly TextBox _order;
 
@@ -785,18 +845,37 @@ internal sealed class Controller {
     private readonly WrapPanel _buttons;
 }
 
-// TODO: Rework Controller construction instead of having this method.
 private static Controller BuildController()
 {
-    var priorityQueues = new List<Type> {
-        typeof(UnsortedArrayPriorityQueue<,>),
-        typeof(BinaryHeap<,>)
-    };
+    var builder = new Controller.Builder()
+        .Order(7)
+        .Edge(0, 1, 10)
+        .Edge(0, 6, 15)
+        .Edge(1, 2, 15)
+        .Edge(2, 3, 12)
+        .Edge(6, 4, 30)
+        .Edge(0, 2, 9)
+        .Edge(3, 4, 16)
+        .Edge(4, 5, 9)
+        .Edge(5, 0, 17)
+        .Edge(0, 2, 8)
+        .Edge(1, 3, 21)
+        .Edge(5, 6, 94)
+        .Edge(2, 4, 14)
+        .Edge(3, 5, 13)
+        .Edge(6, 4, 50)
+        .Edge(4, 0, 20)
+        .Edge(5, 1, 7)
+        .Edge(6, 3, 68)
+        .Edge(5, 5, 1)
+        .Source(0)
+        .PQ(typeof(UnsortedArrayPriorityQueue<,>))
+        .PQ(typeof(BinaryHeap<,>));
 
     if (Configuration.OfferWrongQueue)
-        priorityQueues.Add(typeof(WrongQueue<,>));
+        builder.PQ(typeof(WrongQueue<,>), selected: false);
 
-    return new Controller(priorityQueues);
+    return builder.Build();
 }
 
 private static string BuildDumpLabel(string description,
