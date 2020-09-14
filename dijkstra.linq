@@ -885,9 +885,9 @@ internal sealed class Controller {
     }
 
     private Controller(string initialOrder,
-                        string initialEdges,
-                        string initialSource,
-                        IList<PriorityQueueItem> priorityQueues)
+                       string initialEdges,
+                       string initialSource,
+                       IList<PriorityQueueItem> priorityQueues)
     {
         _order = new TextBox(initialOrder, width: "60px");
         _edges = new TextArea(initialEdges, columns: 50) { Rows = 20 };
