@@ -6,6 +6,115 @@
   <Namespace>WF = System.Windows.Forms</Namespace>
 </Query>
 
+/// <summary>Extensions for clearer and more complex regex usage.</summary>
+internal static class MatchExtensions {
+    internal static string Group(this Match match, int index)
+        => match.Groups[index].ToString();
+}
+
+/// <summary>
+/// An inclusive range represented by a pair of integer endpoints.
+/// </summary>
+/// <remarks>
+/// This differs from <see cref="System.Range"/> by being closed and not
+/// supporting <c>FromEnd</c> (endpoints are absolute, i.e., from start).
+/// </remarks>
+internal readonly struct ClosedInterval {
+    internal static ClosedInterval? Parse(string text)
+        => ParseViaSplitter(text, MaybeNegativeIntervalSplitter);
+
+    internal static ClosedInterval? ParseNonNegative(string text)
+        => ParseViaSplitter(text, NonNegativeIntervalSplitter);
+
+    internal ClosedInterval(int start, int end)
+        => (Start, End) = (start, end);
+
+    public override string ToString() => $"{Start}-{End}";
+
+    internal int Start { get; }
+
+    internal int End { get; }
+
+    private static ClosedInterval? ParseViaSplitter(string text, Regex splitter)
+    {
+        var match = splitter.Match(text);
+
+        return match.Success && int.TryParse(match.Group(1), out var start)
+                             && int.TryParse(match.Group(2), out var end)
+            ? new ClosedInterval(start, end)
+            : default(ClosedInterval?);
+    }
+
+    private static readonly Regex MaybeNegativeIntervalSplitter =
+        new Regex(@"^\s*(-?[^-\s]+)\s*-\s*(-?[^-\s]+)\s*$");
+
+    private static readonly Regex NonNegativeIntervalSplitter =
+        new Regex(@"^([^-]+)-([^-]+)$"); // OK, int.Parse tolerates whitespace.
+}
+
+/// <summary>
+/// Randomly generates a graph description from specified constraints.
+/// </summary>
+internal sealed class GraphGenerator {
+    internal sealed class Builder { // FIXME: Use a less awkward design.
+        internal ClosedInterval Orders { set => _orders = value; }
+        internal ClosedInterval Sizes { set => _sizes = value; }
+        internal ClosedInterval Weights { set => _weights = value; }
+
+        internal bool Loops { set => _loops = value; }
+        internal bool ParallelEdges { set => _parallelEdges = value; }
+        internal bool AllowNegativeWeights
+            { set => _allowNegativeWeights = value; }
+
+        internal bool HighQualityRandomness
+        {
+            set { } // FIXME: Assign appropriate generator delegate instance.
+        }
+
+        internal (GraphGenerator? generator, string? error) Build()
+        {
+            // FIXME: implement this
+        }
+
+        private ClosedInterval? _orders;
+        private ClosedInterval? _sizes;
+        private ClosedInterval? _weights;
+
+        private bool? _loops;
+        private bool? _parallelEdges;
+        private bool? _allowNegativeWeights;
+
+        private Func<int, int, int>? _prng;
+    }
+
+    private GraphGenerator(ClosedInterval orders,
+                           ClosedInterval sizes,
+                           ClosedInterval weights,
+                           bool allowLoops,
+                           bool allowParallelEdges,
+                           Func<int, int, int> prng)
+    {
+        _orders = orders;
+        _sizes = sizes;
+        _weights = weights;
+
+        _allowLoops = allowLoops;
+        _allowParallelEdges = allowParallelEdges;
+
+        _prng = prng;
+    }
+
+    private readonly ClosedInterval _orders;
+    private readonly ClosedInterval _sizes;
+    private readonly ClosedInterval _weights;
+
+    private readonly bool _allowLoops;
+    private readonly bool _allowParallelEdges;
+
+    private readonly Func<int, int, int> _prng;
+}
+
+/// <summary>Graphical frontend for GraphGenerator.</summary>
 internal sealed class GraphGeneratorDialog : WF.Form {
     internal GraphGeneratorDialog()
     {
@@ -30,6 +139,36 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     [DllImport("user32.dll")]
     private static extern bool HideCaret(IntPtr hWnd);
 
+    private static void SubscribeNormalizer(WF.TextBox textBox,
+                                            Func<string, string> normalizer)
+        => textBox.LostFocus += delegate {
+            textBox.Text = normalizer(textBox.Text);
+        };
+
+    private static string NormalizeAsValueOrClosedInterval(string text)
+    {
+        var value = ParseValue(text);
+        if (value != null) return $"{value}";
+        return NormalizeAsClosedInterval(text);
+    }
+
+    private static string AggressiveNormalizeAsClosedInterval(string text)
+    {
+        var value = ParseValue(text);
+        if (value != null) return value < 0 ? $"{value}" : $"{value}-{value}";
+        return NormalizeAsClosedInterval(text);
+    }
+
+    private static string NormalizeAsClosedInterval(string text)
+    {
+        var interval = ClosedInterval.ParseNonNegative(text);
+        if (interval != null) return interval.Value.ToString();
+        return text;
+    }
+
+    private static int? ParseValue(string text)
+        => int.TryParse(text, out var value) ? value : default(int?);
+
     private void SetFormProperties()
     {
         Text = "Graph Generator";
@@ -41,6 +180,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private void SubscribeFormEvents()
     {
+        Shown += GraphGeneratorDialog_FormShown;
         FormClosing += GraphGeneratorDialog_FormClosing;
         Move += delegate { Opacity = ReducedOpacity; };
         Resize += delegate { Opacity = RegularOpacity; };
@@ -49,22 +189,16 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private void SubscribeChildControlEvents()
     {
-        // FIXME: Subscribe handlers to the text boxes' TextChanged events to
-        // update _status.Text and enable/disable _generate. This will enforce:
-        // (1) Text must represent a single value or a range.
-        // (2) The lower bound of range must not exceed the upper.
-        // (3) No numbers may be negative (but for different reasons).
-        // (4) A graph of order 0 must also be of size 0.
-        // (5) If parallel edges are disallowed but loops are allowed, the
-        //     maximum order must not exceed the square of the size.
-        // (6) If parallel edges are disallowed and loops are disallowed, the
-        //     maximum order must be strictly less than the square of the size.
-        // [For (5) and (6), "maximum order" means the single value given for
-        //  order or, if a range is given, the upper bound of the range.]
+        _order.TextChanged += StateChanged;
+        _size.TextChanged += StateChanged;
+        _weights.TextChanged += StateChanged;
+        _allowLoops.CheckedChanged += StateChanged;
+        _allowParallelEdges.CheckedChanged += StateChanged;
+        _highQualityRandomness.CheckedChanged += StateChanged;
 
-        SubscribeNormalizer(_order, NormalizeAsValueOrRange);
-        SubscribeNormalizer(_size, NormalizeAsValueOrRange);
-        SubscribeNormalizer(_weights, AggressiveNormalizeAsRange);
+        SubscribeNormalizer(_order, NormalizeAsValueOrClosedInterval);
+        SubscribeNormalizer(_size, NormalizeAsValueOrClosedInterval);
+        SubscribeNormalizer(_weights, AggressiveNormalizeAsClosedInterval);
 
         _status.GotFocus += delegate { HideCaret(_status.Handle); };
         _generate.Click += generate_Click;
@@ -114,48 +248,13 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Controls.Add(_close);
     }
 
-    private static void SubscribeNormalizer(WF.TextBox textBox,
-                                            Func<string, string> normalizer)
-        => textBox.LostFocus
-            += delegate { textBox.Text = normalizer(textBox.Text); };
-
-    private static string NormalizeAsValueOrRange(string text)
+    private void GraphGeneratorDialog_FormShown(object? sender, EventArgs e)
     {
-        var value = TryParseValue(text);
-        if (value != null) return $"{value}";
-        return NormalizeAsRange(text);
+        if (!_formShownBefore) {
+            _formShownBefore = true;
+            ReadState();
+        }
     }
-
-    private static string AggressiveNormalizeAsRange(string text)
-    {
-        var value = TryParseValue(text);
-        if (value != null) return value < 0 ? $"{value}" : $"{value}-{value}";
-        return NormalizeAsRange(text);
-    }
-
-    private static string NormalizeAsRange(string text)
-    {
-        var range = TryParseRange(text);
-        if (range != null) return RangeToString(range.Value);
-        return text;
-    }
-
-    private static int? TryParseValue(string text)
-        => int.TryParse(text, out var value) ? value : default(int?);
-
-    private static (int low, int high)? TryParseRange(string text)
-    {
-        var tokens = text.Split('-');
-        if (tokens.Length != 2) return null;
-
-        var range = tokens.Select(TryParseValue).OfType<int>().ToArray();
-        if (range.Length != 2) return null;
-
-        return (low: range[0], high: range[1]);
-    }
-
-    private static string RangeToString((int low, int high) range)
-        => $"{range.low}-{range.high}";
 
     private void GraphGeneratorDialog_FormClosing(object sender,
                                                   WF.FormClosingEventArgs e)
@@ -182,6 +281,80 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private void SetToolTips(string text, params WF.Control[] controls)
         => Array.ForEach(controls, control => SetToolTip(control, text));
+
+    private void StateChanged(object? sender, EventArgs e)
+    {
+        if (_formShownBefore) ReadState();
+    }
+
+    private GraphGenerator? ReadState()
+    {
+        // (1) Text must represent a single value or a range.
+        // (2) The lower bound of range must not exceed the upper.
+        // (3) No numbers may be negative (but for different reasons).
+
+        var orders = ReadClosedInterval(_orderLabel, _order);
+        if (orders == null) return null;
+
+        var sizes = ReadClosedInterval(_sizeLabel, _size);
+        if (sizes == null) return null;
+
+        var weights = ReadClosedInterval(_weightsLabel, _weights);
+        if (weights == null) return null;
+
+        // (4) A graph of order 0 must also be of size 0.
+        // (5) If parallel edges are disallowed but loops are allowed, the
+        //     maximum order must not exceed the square of the size.
+        // (6) If parallel edges are disallowed and loops are disallowed, the
+        //     maximum order must be strictly less than the square of the size.
+        // [For (5) and (6), "maximum order" means the single value given for
+        //  order or, if a range is given, the upper bound of the range.]
+
+        var (generator, error) = new GraphGenerator.Builder {
+            Orders = orders.Value,
+            Sizes = sizes.Value,
+            Weights = weights.Value,
+            Loops = _allowLoops.Checked,
+            ParallelEdges = _allowParallelEdges.Checked,
+            HighQualityRandomness = _highQualityRandomness.Checked,
+            AllowNegativeWeights = false
+        }.Build();
+
+        if (error == null)
+            StatusOk();
+        else
+            StatusError(error);
+
+        return generator;
+    }
+
+    private ClosedInterval? ReadClosedInterval(WF.Label label,
+                                               WF.TextBox textBox)
+    {
+        var singleton = ParseValue(textBox.Text);
+
+        if (singleton != null)
+            return new ClosedInterval(singleton.Value, singleton.Value);
+
+        var interval = ClosedInterval.Parse(textBox.Text);
+
+        if (interval == null)
+            StatusError($"{label} must be an integer value or range");
+
+        return interval;
+    }
+
+    private void StatusOk()
+    {
+        _status.ForeColor = Color.Green;
+        _status.Text = "OK";
+    }
+
+    private void StatusError(string message)
+    {
+        _status.ForeColor = Color.Red;
+        _status.Text = message;
+    }
 
     private readonly WF.Label _orderLabel = new WF.Label {
         Text = "Order",
@@ -244,12 +417,12 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     };
 
     private readonly WF.TextBox _status = new WF.TextBox {
-        Text = "OK",
+        Text = "Loading...",
         Location = new Point(x: 15, y: 102),
         Size = new Size(width: 250, height: 15),
         ReadOnly = true,
         BorderStyle = WF.BorderStyle.None,
-        ForeColor = Color.Green,
+        ForeColor = Color.Brown,
         BackColor = WF.Form.DefaultBackColor,
         Font = new Font(WF.TextBox.DefaultFont, FontStyle.Bold),
         Cursor = WF.Cursors.Arrow,
@@ -276,6 +449,8 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     };
 
     private readonly WF.ToolTip _toolTip = new WF.ToolTip();
+
+    private bool _formShownBefore = false;
 }
 
 private static void Main()
