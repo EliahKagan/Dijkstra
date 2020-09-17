@@ -6,6 +6,8 @@
   <Namespace>WF = System.Windows.Forms</Namespace>
 </Query>
 
+#load "./helpers.linq"
+
 /// <summary>Extensions for clearer and more complex regex usage.</summary>
 internal static class MatchExtensions {
     internal static string Group(this Match match, int index)
@@ -35,6 +37,10 @@ internal readonly struct ClosedInterval {
 
     internal int End { get; }
 
+    internal int Count => Math.Max(0, End - Start + 1);
+
+    internal bool IsReversed => End < Start; // FIXME: rename or remove
+
     private static ClosedInterval? ParseViaSplitter(string text, Regex splitter)
     {
         var match = splitter.Match(text);
@@ -56,62 +62,146 @@ internal readonly struct ClosedInterval {
 /// Randomly generates a graph description from specified constraints.
 /// </summary>
 internal sealed class GraphGenerator {
-    internal sealed class Builder { // FIXME: Use a less awkward design.
-        internal ClosedInterval Orders { set => _orders = value; }
-        internal ClosedInterval Sizes { set => _sizes = value; }
-        internal ClosedInterval Weights { set => _weights = value; }
-
-        internal bool Loops { set => _loops = value; }
-        internal bool ParallelEdges { set => _parallelEdges = value; }
-        internal bool AllowNegativeWeights
-            { set => _allowNegativeWeights = value; }
-
-        internal bool HighQualityRandomness
-        {
-            set { } // FIXME: Assign appropriate generator delegate instance.
-        }
-
-        internal (GraphGenerator? generator, string? error) Build()
-        {
-            // FIXME: implement this
-        }
-
-        private ClosedInterval? _orders;
-        private ClosedInterval? _sizes;
-        private ClosedInterval? _weights;
-
-        private bool? _loops;
-        private bool? _parallelEdges;
-        private bool? _allowNegativeWeights;
-
-        private Func<int, int, int>? _prng;
-    }
-
-    private GraphGenerator(ClosedInterval orders,
-                           ClosedInterval sizes,
-                           ClosedInterval weights,
-                           bool allowLoops,
-                           bool allowParallelEdges,
-                           Func<int, int, int> prng)
+    internal ClosedInterval Orders
     {
-        _orders = orders;
-        _sizes = sizes;
-        _weights = weights;
-
-        _allowLoops = allowLoops;
-        _allowParallelEdges = allowParallelEdges;
-
-        _prng = prng;
+        set => Set(out _orders, value);
     }
 
-    private readonly ClosedInterval _orders;
-    private readonly ClosedInterval _sizes;
-    private readonly ClosedInterval _weights;
+    internal ClosedInterval Sizes
+    {
+        set => Set(out _sizes, value);
+    }
 
-    private readonly bool _allowLoops;
-    private readonly bool _allowParallelEdges;
+    internal ClosedInterval Weights
+    {
+        set => Set(out _weights, value);
+    }
 
-    private readonly Func<int, int, int> _prng;
+    internal bool AllowLoops
+    {
+        set => Set(out _allowLoops, value);
+    }
+
+    internal bool AllowParallelEdges
+    {
+        set => Set(out _allowParallelEdges, value);
+    }
+
+    internal bool UniqueWeights
+    {
+        set => Set(out _uniqueWeights, value);
+    }
+
+    internal bool AllowNegativeWeights
+    {
+        set => Set(out _allowNegativeWeights, value);
+    }
+
+    internal string? Error
+    {
+        get {
+            Check();
+            return _error;
+        }
+    }
+
+    // FIXME: Maybe lock in values once set to avoid race conditions?
+
+    internal IEnumerable<Edge> Generate(Func<int, int, int> prng)
+    {
+        // FIXME: implement this!
+        throw new NotImplementedException();
+    }
+
+    private void Set<T>(out T field, T value)
+    {
+        field = value;
+        _checked = false;
+    }
+
+    private void Check()
+    {
+        if (_checked) return;
+
+        _error = CheckEachInterval()
+              ?? CheckEachCardinality()
+              ?? CheckWeightRange()
+              ?? CheckSizeAgainstOrder();
+
+        _checked = true;
+    }
+
+    private string? CheckEachInterval()
+    {
+        if (_orders.IsReversed)
+            return "Range of orders contains no values";
+        if (_sizes.IsReversed)
+            return "Range of sizes contains no values";
+        if (_weights.IsReversed)
+            return "Range of weights contains no values";
+
+        return null;
+    }
+
+    private string? CheckEachCardinality()
+    {
+        if (_orders.Start < 0)
+            return "Order (vertex count) can't be negative";
+        if (_sizes.Start < 0)
+            return "Size (edge count) can't be negative";
+
+        return null;
+    }
+
+    private string? CheckWeightRange()
+    {
+        if (!_allowNegativeWeights && _weights.Start < 0)
+            return "Negative edge weights not supported";
+
+        // If weights must be unique, ensure the *whole* size range is okay.
+        if (_uniqueWeights && _weights.Count < _sizes.End) {
+            return _weights.Count == 1
+                    ? "Too many edges for 1 unique weight"
+                    : $"Too many edges for {_weights.Count} unique weights";
+        }
+
+        return null;
+    }
+
+    private string? CheckSizeAgainstOrder()
+    {
+        if (MaxSize < _sizes.Start) { // Note: This is a *lifted* < comparison.
+            return (_orders.End, MaxSize) switch {
+                (1, 1)         => $"1 vertex allows only 1 edge",
+                (1, var m)     => $"1 vertex allows only {m} edges",
+                (var n, 1)     => $"{n} vertices allow only 1 edge", // Unused.
+                (var n, var m) => $"{n} vertices allow only {m} edges"
+            };
+        }
+
+        return null;
+    }
+
+    private long? MaxSize
+    {
+        get {
+            if (_allowParallelEdges) return null;
+            var maxOrder = (long)_orders.End;
+            return maxOrder * (_allowLoops ? maxOrder : maxOrder - 1);
+        }
+    }
+
+    private ClosedInterval _orders;
+    private ClosedInterval _sizes;
+    private ClosedInterval _weights;
+
+    private bool _allowLoops;
+    private bool _allowParallelEdges;
+    private bool _uniqueWeights;
+    private bool _allowNegativeWeights;
+
+    private bool _checked = false;
+    private string? _error = null;
 }
 
 /// <summary>Graphical frontend for GraphGenerator.</summary>
@@ -148,22 +238,26 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private static string NormalizeAsValueOrClosedInterval(string text)
     {
         var value = ParseValue(text);
-        if (value != null) return $"{value}";
-        return NormalizeAsClosedInterval(text);
-    }
+        if (value != null) return value.Value.ToString();
 
-    private static string AggressiveNormalizeAsClosedInterval(string text)
-    {
-        var value = ParseValue(text);
-        if (value != null) return value < 0 ? $"{value}" : $"{value}-{value}";
-        return NormalizeAsClosedInterval(text);
+        var interval = ClosedInterval.ParseNonNegative(text);
+        if (interval == null) return text;
+
+        return interval.Value.Start == interval.Value.End
+                ? interval.Value.Start.ToString() // Collapse n-n to n.
+                : interval.Value.ToString();
     }
 
     private static string NormalizeAsClosedInterval(string text)
     {
         var interval = ClosedInterval.ParseNonNegative(text);
         if (interval != null) return interval.Value.ToString();
-        return text;
+
+        var value = ParseValue(text);
+        if (value == null) return text;
+
+        // Expand n to n-n.
+        return new ClosedInterval(value.Value, value.Value).ToString();
     }
 
     private static int? ParseValue(string text)
@@ -198,7 +292,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
         SubscribeNormalizer(_order, NormalizeAsValueOrClosedInterval);
         SubscribeNormalizer(_size, NormalizeAsValueOrClosedInterval);
-        SubscribeNormalizer(_weights, AggressiveNormalizeAsClosedInterval);
+        SubscribeNormalizer(_weights, NormalizeAsClosedInterval);
 
         _status.GotFocus += delegate { HideCaret(_status.Handle); };
         _generate.Click += generate_Click;
@@ -241,6 +335,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Controls.Add(_weights);
         Controls.Add(_allowLoops);
         Controls.Add(_allowParallelEdges);
+        //Controls.Add(_uniqueEdgeWeights); // FIXME: uncomment this
         Controls.Add(_highQualityRandomness);
         Controls.Add(_status);
         Controls.Add(_generate);
@@ -273,7 +368,10 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private void cancel_Click(object? sender, EventArgs e)
     {
-        // FIXME: implement this
+        // FIXME: implement the actual cancellation logic!
+
+        _cancel.Enabled = false;
+        ReadState(); // TODO: Do I want this, or a cancellation notice?
     }
 
     private void SetToolTip(WF.Control control, string text)
@@ -289,71 +387,65 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private GraphGenerator? ReadState()
     {
-        // (1) Text must represent a single value or a range.
-        // (2) The lower bound of range must not exceed the upper.
-        // (3) No numbers may be negative (but for different reasons).
+        const string integerOrRange = "must be an integer (or range)";
+        const string rangeOrInteger = "must be a range (or integer)";
 
-        var orders = ReadClosedInterval(_orderLabel, _order);
+        var orders = ReadClosedInterval(_order, _orderLabel, integerOrRange);
         if (orders == null) return null;
 
-        var sizes = ReadClosedInterval(_sizeLabel, _size);
+        var sizes = ReadClosedInterval(_size, _sizeLabel, integerOrRange);
         if (sizes == null) return null;
 
-        var weights = ReadClosedInterval(_weightsLabel, _weights);
+        var weights = ReadClosedInterval(_weights, _weightsLabel, rangeOrInteger);
         if (weights == null) return null;
 
-        // (4) A graph of order 0 must also be of size 0.
-        // (5) If parallel edges are disallowed but loops are allowed, the
-        //     maximum order must not exceed the square of the size.
-        // (6) If parallel edges are disallowed and loops are disallowed, the
-        //     maximum order must be strictly less than the square of the size.
-        // [For (5) and (6), "maximum order" means the single value given for
-        //  order or, if a range is given, the upper bound of the range.]
-
-        var (generator, error) = new GraphGenerator.Builder {
+        var gen = new GraphGenerator {
             Orders = orders.Value,
             Sizes = sizes.Value,
             Weights = weights.Value,
-            Loops = _allowLoops.Checked,
-            ParallelEdges = _allowParallelEdges.Checked,
-            HighQualityRandomness = _highQualityRandomness.Checked,
+            AllowLoops = _allowLoops.Checked,
+            AllowParallelEdges = _allowParallelEdges.Checked,
+            UniqueWeights = _uniqueEdgeWeights.Checked,
             AllowNegativeWeights = false
-        }.Build();
+        };
 
-        if (error == null)
+        if (gen.Error == null)
             StatusOk();
         else
-            StatusError(error);
+            StatusError(gen.Error);
 
-        return generator;
+        return gen;
     }
 
-    private ClosedInterval? ReadClosedInterval(WF.Label label,
-                                               WF.TextBox textBox)
+    private ClosedInterval? ReadClosedInterval(WF.TextBox textBox,
+                                               WF.Label label,
+                                               string requirement)
     {
         var singleton = ParseValue(textBox.Text);
-
         if (singleton != null)
             return new ClosedInterval(singleton.Value, singleton.Value);
 
         var interval = ClosedInterval.Parse(textBox.Text);
+        if (interval != null) return interval;
 
-        if (interval == null)
-            StatusError($"{label} must be an integer value or range");
-
-        return interval;
+        StatusError(string.IsNullOrWhiteSpace(textBox.Text)
+                        ? $"{label.Text} not specified"
+                        : $"{label.Text} {requirement}");
+        return null;
     }
 
     private void StatusOk()
     {
         _status.ForeColor = Color.Green;
         _status.Text = "OK";
+        if (!_cancel.Enabled) _generate.Enabled = true;
     }
 
     private void StatusError(string message)
     {
         _status.ForeColor = Color.Red;
         _status.Text = message;
+        _generate.Enabled = false;
     }
 
     private readonly WF.Label _orderLabel = new WF.Label {
@@ -409,6 +501,13 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Checked = true,
     };
 
+    private readonly WF.CheckBox _uniqueEdgeWeights = new WF.CheckBox {
+        Text = "unique edge weights",
+        // FIXME: specify Location
+        Size = new Size(width: 130, height: 20),
+        Checked = false,
+    };
+
     private readonly WF.CheckBox _highQualityRandomness = new WF.CheckBox {
         Text = "high quality PRNG",
         Location = new Point(x: 135, y: 71),
@@ -433,6 +532,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Text = "Generate",
         Location = new Point(x: 15, y: 125),
         Size = new Size(width: 80, height: 30),
+        Enabled = false,
     };
 
     private readonly WF.Button _cancel = new WF.Button {

@@ -2,6 +2,8 @@
   <Namespace>LINQPad.Controls</Namespace>
 </Query>
 
+#load "./helpers.linq"
+
 /// <summary>Configuration options not exposed by the controller.</summary>
 internal static class Configuration {
     internal static bool DisableControlsWhileProcessing => true;
@@ -269,18 +271,6 @@ internal sealed class WrongQueue<TKey, TValue> : IPriorityQueue<TKey, TValue> {
     public KeyValuePair<TKey, TValue> ExtractMin()
         => throw new InvalidOperationException(
             "Can't extract from WrongQueue, which only pretends to take input");
-}
-
-/// <summary>An edge in a weighted directed graph.</summary>
-internal readonly struct Edge {
-    internal Edge(int src, int dest, int weight)
-        => (Src, Dest, Weight) = (src, dest, weight);
-
-    internal int Src { get; }
-
-    internal int Dest { get; }
-
-    internal int Weight { get; }
 }
 
 /// <summary>Convenience functions for marked edges.</summary>
