@@ -288,6 +288,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         _weights.TextChanged += StateChanged;
         _allowLoops.CheckedChanged += StateChanged;
         _allowParallelEdges.CheckedChanged += StateChanged;
+        _uniqueEdgeWeights.CheckedChanged += StateChanged;
         _highQualityRandomness.CheckedChanged += StateChanged;
 
         SubscribeNormalizer(_order, NormalizeAsValueOrClosedInterval);
@@ -315,6 +316,8 @@ internal sealed class GraphGeneratorDialog : WF.Form {
                     + "vertex to the same destination vertex. Note that\n"
                     + "edges in opposite directions between the same\n"
                     + "vertices are always permitted.");
+        SetToolTip(_uniqueEdgeWeights,
+                   "Must no two edges have the same weight?");
         SetToolTip(_highQualityRandomness,
                    "slower but higher quality pseudorandom number generation");
 
@@ -335,7 +338,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Controls.Add(_weights);
         Controls.Add(_allowLoops);
         Controls.Add(_allowParallelEdges);
-        //Controls.Add(_uniqueEdgeWeights); // FIXME: uncomment this
+        Controls.Add(_uniqueEdgeWeights);
         Controls.Add(_highQualityRandomness);
         Controls.Add(_status);
         Controls.Add(_generate);
@@ -375,7 +378,8 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     }
 
     private void SetToolTip(WF.Control control, string text)
-        => _toolTip.SetToolTip(control, text);
+        => _toolTip.SetToolTip(control,
+                               text.Replace("\n", Environment.NewLine));
 
     private void SetToolTips(string text, params WF.Control[] controls)
         => Array.ForEach(controls, control => SetToolTip(control, text));
@@ -489,29 +493,29 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private readonly WF.CheckBox _allowLoops = new WF.CheckBox {
         Text = "allow loops",
-        Location = new Point(x: 135, y: 13),
-        Size = new Size(width: 130, height: 20),
+        Location = new Point(x: 135, y: 12),
+        Size = new Size(width: 140, height: 20),
         Checked = true,
     };
 
     private readonly WF.CheckBox _allowParallelEdges = new WF.CheckBox {
         Text = "allow parallel edges",
-        Location = new Point(x: 135, y: 42),
-        Size = new Size(width: 130, height: 20),
+        Location = new Point(x: 135, y: 33),
+        Size = new Size(width: 140, height: 20),
         Checked = true,
     };
 
     private readonly WF.CheckBox _uniqueEdgeWeights = new WF.CheckBox {
         Text = "unique edge weights",
-        // FIXME: specify Location
-        Size = new Size(width: 130, height: 20),
+        Location = new Point(x: 135, y: 54),
+        Size = new Size(width: 140, height: 20),
         Checked = false,
     };
 
     private readonly WF.CheckBox _highQualityRandomness = new WF.CheckBox {
         Text = "high quality PRNG",
-        Location = new Point(x: 135, y: 71),
-        Size = new Size(width: 130, height: 20),
+        Location = new Point(x: 135, y: 76),
+        Size = new Size(width: 140, height: 20),
         Checked = false,
     };
 
