@@ -2,6 +2,7 @@
   <Namespace>LC = LINQPad.Controls</Namespace>
   <Namespace>System.ComponentModel</Namespace>
   <Namespace>System.Drawing</Namespace>
+  <Namespace>System.Numerics</Namespace>
   <Namespace>System.Runtime.InteropServices</Namespace>
   <Namespace>WF = System.Windows.Forms</Namespace>
 </Query>
@@ -23,32 +24,30 @@ internal static class MatchExtensions {
 /// </remarks>
 internal readonly struct ClosedInterval {
     internal static ClosedInterval? Parse(string text)
-        => ParseViaSplitter(text, MaybeNegativeIntervalSplitter);
+        => SplitParse(text, MaybeNegativeIntervalSplitter);
 
     internal static ClosedInterval? ParseNonNegative(string text)
-        => ParseViaSplitter(text, NonNegativeIntervalSplitter);
+        => SplitParse(text, NonNegativeIntervalSplitter);
 
-    internal ClosedInterval(int start, int end)
-        => (Start, End) = (start, end);
+    internal ClosedInterval(int min, int max) => (Min, Max) = (min, max);
 
-    public override string ToString() => $"{Start}-{End}";
+    public override string ToString() => $"{Min}-{Max}";
 
-    internal int Start { get; }
+    internal int Min { get; }
 
-    internal int End { get; }
+    internal int Max { get; }
 
-    internal int Count => Math.Max(0, End - Start + 1);
+    internal long Count => Max < Min ? 0L : (long)Max - (long)Min + 1L;
 
-    internal bool IsReversed => End < Start; // FIXME: rename or remove
-
-    private static ClosedInterval? ParseViaSplitter(string text, Regex splitter)
+    private static ClosedInterval? SplitParse(string text, Regex splitter)
     {
         var match = splitter.Match(text);
 
-        return match.Success && int.TryParse(match.Group(1), out var start)
-                             && int.TryParse(match.Group(2), out var end)
-            ? new ClosedInterval(start, end)
-            : default(ClosedInterval?);
+        if (match.Success && int.TryParse(match.Group(1), out var start)
+                          && int.TryParse(match.Group(2), out var end))
+            return new ClosedInterval(start, end);
+
+        return null;
     }
 
     private static readonly Regex MaybeNegativeIntervalSplitter =
@@ -125,19 +124,19 @@ internal sealed class GraphGenerator {
 
         _error = CheckEachInterval()
               ?? CheckEachCardinality()
-              ?? CheckWeightRange()
-              ?? CheckSizeAgainstOrder();
+              ?? CheckSizeAgainstOrder()
+              ?? CheckWeightRange();
 
         _checked = true;
     }
 
     private string? CheckEachInterval()
     {
-        if (_orders.IsReversed)
+        if (_orders.Count == 0)
             return "Range of orders contains no values";
-        if (_sizes.IsReversed)
+        if (_sizes.Count == 0)
             return "Range of sizes contains no values";
-        if (_weights.IsReversed)
+        if (_weights.Count == 0)
             return "Range of weights contains no values";
 
         return null;
@@ -145,33 +144,15 @@ internal sealed class GraphGenerator {
 
     private string? CheckEachCardinality()
     {
-        if (_orders.Start < 0)
-            return "Order (vertex count) can't be negative";
-        if (_sizes.Start < 0)
-            return "Size (edge count) can't be negative";
-
-        return null;
-    }
-
-    private string? CheckWeightRange()
-    {
-        if (!_allowNegativeWeights && _weights.Start < 0)
-            return "Negative edge weights not supported";
-
-        // If weights must be unique, ensure the *whole* size range is okay.
-        if (_uniqueWeights && _weights.Count < _sizes.End) {
-            return _weights.Count == 1
-                    ? "Too many edges for 1 unique weight"
-                    : $"Too many edges for {_weights.Count} unique weights";
-        }
-
+        if (_orders.Min < 0) return "Order (vertex count) can't be negative";
+        if (_sizes.Min < 0) return "Size (edge count) can't be negative";
         return null;
     }
 
     private string? CheckSizeAgainstOrder()
     {
-        if (MaxSize < _sizes.Start) { // Note: This is a *lifted* < comparison.
-            return (_orders.End, MaxSize) switch {
+        if (MaxSize < _sizes.Min) { // Note: This is a *lifted* < comparison.
+            return (_orders.Max, MaxSize) switch {
                 (1, 1)         => $"1 vertex allows only 1 edge",
                 (1, var m)     => $"1 vertex allows only {m} edges",
                 (var n, 1)     => $"{n} vertices allow only 1 edge", // Unused.
@@ -182,11 +163,30 @@ internal sealed class GraphGenerator {
         return null;
     }
 
+    private string? CheckWeightRange()
+    {
+        if (!_allowNegativeWeights && _weights.Min < 0)
+            return "Negative edge weights not supported";
+
+        // If weights must be unique, ensure the *whole* size range is okay.
+        if (_uniqueWeights && _weights.Count < _sizes.Max) {
+            return (_sizes.Max, _weights.Count) switch {
+                (1, 1) => $"1 edge but only 1 weight", // Unused.
+                (1, var w) => $"1 edge but only {w} weights", // Unused.
+                (var n, 1) => $"{n} edges but only 1 weight",
+                (var n, var w) => $"{n} edges but only {w} weights"
+            };
+        }
+
+        return null;
+    }
+
     private long? MaxSize
     {
         get {
+            if (_orders.Max == 0) return 0;
             if (_allowParallelEdges) return null;
-            var maxOrder = (long)_orders.End;
+            var maxOrder = (long)_orders.Max;
             return maxOrder * (_allowLoops ? maxOrder : maxOrder - 1);
         }
     }
@@ -243,8 +243,8 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         var interval = ClosedInterval.ParseNonNegative(text);
         if (interval == null) return text;
 
-        return interval.Value.Start == interval.Value.End
-                ? interval.Value.Start.ToString() // Collapse n-n to n.
+        return interval.Value.Min == interval.Value.Max
+                ? interval.Value.Min.ToString() // Collapse n-n to n.
                 : interval.Value.ToString();
     }
 
@@ -425,16 +425,27 @@ internal sealed class GraphGeneratorDialog : WF.Form {
                                                WF.Label label,
                                                string requirement)
     {
-        var singleton = ParseValue(textBox.Text);
+        var input = textBox.Text;
+
+        var singleton = ParseValue(input);
         if (singleton != null)
             return new ClosedInterval(singleton.Value, singleton.Value);
 
-        var interval = ClosedInterval.Parse(textBox.Text);
+        var interval = ClosedInterval.Parse(input);
         if (interval != null) return interval;
 
-        StatusError(string.IsNullOrWhiteSpace(textBox.Text)
-                        ? $"{label.Text} not specified"
-                        : $"{label.Text} {requirement}");
+        // FIXME: Interval notation with out-of-range numbers should also
+        // probably report errors like "... cannot exceed ...".
+
+        if (string.IsNullOrWhiteSpace(input))
+            StatusError($"{label.Text} not specified");
+        else if (!BigInteger.TryParse(input, out var bigValue))
+            StatusError($"{label.Text} {requirement}");
+        else if (bigValue.Sign == -1)
+            StatusError($"{label.Text} is a huge negative number!");
+        else
+            StatusError($"{label.Text} cannot exceed {int.MaxValue}");
+
         return null;
     }
 
@@ -442,6 +453,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     {
         _status.ForeColor = Color.Green;
         _status.Text = "OK";
+        SetStatusToolTip();
         if (!_cancel.Enabled) _generate.Enabled = true;
     }
 
@@ -449,8 +461,12 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     {
         _status.ForeColor = Color.Red;
         _status.Text = message;
+        SetStatusToolTip();
         _generate.Enabled = false;
     }
+
+    private void SetStatusToolTip()
+        => SetToolTip(_status, $"status: {_status.Text}");
 
     private readonly WF.Label _orderLabel = new WF.Label {
         Text = "Order",
@@ -461,33 +477,33 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private readonly WF.TextBox _order = new WF.TextBox {
         Text = "10",
-        Location = new Point(x: 55, y: 13),
+        Location = new Point(x: 60, y: 13),
         Size = new Size(width: 60, height: 15),
     };
 
     private readonly WF.Label _sizeLabel = new WF.Label {
         Text = "Size",
         Location = new Point(x: 8, y: 46),
-        Size = new Size(width: 45, height: 15),
+        Size = new Size(width: 50, height: 15),
         TextAlign = ContentAlignment.MiddleCenter,
     };
 
     private readonly WF.TextBox _size = new WF.TextBox {
         Text = "25",
-        Location = new Point(x: 55, y: 42),
+        Location = new Point(x: 60, y: 42),
         Size = new Size(width: 60, height: 15),
     };
 
     private readonly WF.Label _weightsLabel = new WF.Label {
         Text = "Weights",
         Location = new Point(x: 8, y: 75),
-        Size = new Size(width: 45, height: 15),
+        Size = new Size(width: 50, height: 15),
         TextAlign = ContentAlignment.MiddleCenter,
     };
 
     private readonly WF.TextBox _weights = new WF.TextBox {
         Text = "1-100",
-        Location = new Point(x: 55, y: 71),
+        Location = new Point(x: 60, y: 71),
         Size = new Size(width: 60, height: 15),
     };
 
@@ -521,7 +537,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private readonly WF.TextBox _status = new WF.TextBox {
         Text = "Loading...",
-        Location = new Point(x: 15, y: 102),
+        Location = new Point(x: 10, y: 102),
         Size = new Size(width: 250, height: 15),
         ReadOnly = true,
         BorderStyle = WF.BorderStyle.None,
@@ -557,6 +573,10 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private bool _formShownBefore = false;
 }
 
+/// <summary>
+/// Test harness for <see cref="GraphGeneratorDialog"/> and
+/// <see cref="GraphGenerator"/>.
+/// </summary>
 private static void Main()
 {
     var dialog = new GraphGeneratorDialog();
