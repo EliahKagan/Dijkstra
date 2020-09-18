@@ -240,27 +240,26 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private static string NormalizeAsValueOrClosedInterval(string text)
     {
-        var value = ParseValue(text);
-        if (value != null) return value.Value.ToString();
+        if (ParseValue(text) is int value) return value.ToString();
 
-        var interval = ClosedInterval.ParseNonNegative(text);
-        if (interval == null) return text;
+        if (ClosedInterval.ParseNonNegative(text) is ClosedInterval interval) {
+            return interval.Min == interval.Max
+                    ? interval.Min.ToString() // Collapse n-n to n.
+                    : interval.ToString();
+        }
 
-        return interval.Value.Min == interval.Value.Max
-                ? interval.Value.Min.ToString() // Collapse n-n to n.
-                : interval.Value.ToString();
+        return text;
     }
 
     private static string NormalizeAsClosedInterval(string text)
     {
-        var interval = ClosedInterval.ParseNonNegative(text);
-        if (interval != null) return interval.Value.ToString();
+        if (ClosedInterval.ParseNonNegative(text) is ClosedInterval interval)
+            return interval.ToString();
 
-        var value = ParseValue(text);
-        if (value == null) return text;
+        if (ParseValue(text) is int value)
+            return new ClosedInterval(value, value).ToString();
 
-        // Expand n to n-n.
-        return new ClosedInterval(value.Value, value.Value).ToString();
+        return text;
     }
 
     private static int? ParseValue(string text)
@@ -416,29 +415,28 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         const string integerOrRange = "must be an integer (or range)";
         const string rangeOrInteger = "must be a range (or integer)";
 
-        var orders = ReadClosedInterval(_order, _orderLabel, integerOrRange);
-        if (orders == null) return null;
-
-        var sizes = ReadClosedInterval(_size, _sizeLabel, integerOrRange);
-        if (sizes == null) return null;
-
-        var weights = ReadClosedInterval(_weights, _weightsLabel, rangeOrInteger);
-        if (weights == null) return null;
+        if (!(ReadClosedInterval(_order, _orderLabel, integerOrRange)
+                        is ClosedInterval orders
+                && ReadClosedInterval(_size, _sizeLabel, integerOrRange)
+                        is ClosedInterval sizes
+                && ReadClosedInterval(_weights, _weightsLabel, rangeOrInteger)
+                        is ClosedInterval weights))
+            return null;
 
         var gen = new GraphGenerator {
-            Orders = orders.Value,
-            Sizes = sizes.Value,
-            Weights = weights.Value,
+            Orders = orders,
+            Sizes = sizes,
+            Weights = weights,
             AllowLoops = _allowLoops.Checked,
             AllowParallelEdges = _allowParallelEdges.Checked,
             UniqueWeights = _uniqueEdgeWeights.Checked,
             AllowNegativeWeights = false
         };
 
-        if (gen.Error == null)
-            StatusOk();
+        if (gen.Error is string error)
+            StatusError(error);
         else
-            StatusError(gen.Error);
+            StatusOk();
 
         return gen;
     }
@@ -449,12 +447,11 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     {
         var input = textBox.Text;
 
-        var singleton = ParseValue(input);
-        if (singleton != null)
-            return new ClosedInterval(singleton.Value, singleton.Value);
+        if (ParseValue(input) is int value)
+            return new ClosedInterval(value, value);
 
-        var interval = ClosedInterval.Parse(input);
-        if (interval != null) return interval;
+        if (ClosedInterval.Parse(input) is ClosedInterval interval)
+            return interval;
 
         // FIXME: Interval notation with out-of-range numbers should also
         // probably report errors like "... cannot exceed ...".
