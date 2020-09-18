@@ -229,6 +229,9 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     [DllImport("user32.dll")]
     private static extern bool HideCaret(IntPtr hWnd);
 
+    [DllImport("user32.dll")]
+    private static extern bool ShowCaret(IntPtr hWnd);
+
     private static void SubscribeNormalizer(WF.TextBox textBox,
                                             Func<string, string> normalizer)
         => textBox.LostFocus += delegate {
@@ -270,6 +273,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         FormBorderStyle = WF.FormBorderStyle.Fixed3D;
         MaximizeBox = false;
         Opacity = RegularOpacity;
+        KeyPreview = true;
     }
 
     private void SubscribeFormEvents()
@@ -279,6 +283,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Move += delegate { Opacity = ReducedOpacity; };
         Resize += delegate { Opacity = RegularOpacity; };
         ResizeEnd += delegate { Opacity = RegularOpacity; };
+        KeyDown += GraphGeneratorDialog_KeyDown;
     }
 
     private void SubscribeChildControlEvents()
@@ -295,7 +300,8 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         SubscribeNormalizer(_size, NormalizeAsValueOrClosedInterval);
         SubscribeNormalizer(_weights, NormalizeAsClosedInterval);
 
-        _status.GotFocus += delegate { HideCaret(_status.Handle); };
+        _status.GotFocus += status_GotFocus;
+        _status.KeyDown += status_KeyDown;
         _generate.Click += generate_Click;
         _cancel.Click += cancel_Click;
         _close.Click += delegate { Hide(); };
@@ -361,6 +367,22 @@ internal sealed class GraphGeneratorDialog : WF.Form {
             Hide();
             e.Cancel = true;
         }
+    }
+
+    private void GraphGeneratorDialog_KeyDown(object sender, WF.KeyEventArgs e)
+    {
+        if (e.KeyCode == WF.Keys.F7) {
+            _wantStatusCaret = !_wantStatusCaret;
+            SetStatusToolTip();
+        }
+    }
+
+    private void status_GotFocus(object? sender, EventArgs e)
+        => ApplyStatusCaretPreference();
+
+    private void status_KeyDown(object sender, WF.KeyEventArgs e)
+    {
+        if (e.KeyCode == WF.Keys.F7) ApplyStatusCaretPreference();
     }
 
     private void generate_Click(object? sender, EventArgs e)
@@ -466,7 +488,29 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     }
 
     private void SetStatusToolTip()
-        => SetToolTip(_status, $"status: {_status.Text}");
+    {
+        var caretHelp = (_wantStatusCaret ? "Press F7 to disable caret."
+                                          : "Press F7 to enable caret.");
+
+        SetToolTip(_status, $"status: {_status.Text}\n({caretHelp})");
+    }
+
+    private void ApplyStatusCaretPreference()
+    {
+        if (_haveStatusCaret == _wantStatusCaret) return;
+
+        if (_wantStatusCaret) {
+            if (ShowCaret(_status.Handle))
+                _haveStatusCaret = true;
+            else
+                "Failure showing generator status caret".Dump();
+        } else {
+            if (HideCaret(_status.Handle))
+                _haveStatusCaret = false;
+            else
+                "Failure hiding generator status caret".Dump();
+        }
+    }
 
     private readonly WF.Label _orderLabel = new WF.Label {
         Text = "Order",
@@ -571,6 +615,10 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private readonly WF.ToolTip _toolTip = new WF.ToolTip();
 
     private bool _formShownBefore = false;
+
+    private bool _wantStatusCaret = false;
+
+    private bool _haveStatusCaret = true;
 }
 
 /// <summary>
