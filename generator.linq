@@ -60,74 +60,40 @@ internal readonly struct ClosedInterval {
 /// <summary>
 /// Randomly generates a graph description from specified constraints.
 /// </summary>
-internal sealed class GraphGenerator {
-    internal ClosedInterval Orders
+internal readonly struct GraphGenerator {
+    internal GraphGenerator(ClosedInterval orders,
+                            ClosedInterval sizes,
+                            ClosedInterval weights,
+                            bool allowLoops,
+                            bool allowParallelEdges,
+                            bool uniqueWeights,
+                            bool allowNegativeWeights)
     {
-        set => Set(out _orders, value);
+        _orders = orders;
+        _sizes = sizes;
+        _weights = weights;
+        _allowLoops = allowLoops;
+        _allowParallelEdges = allowParallelEdges;
+        _uniqueWeights = uniqueWeights;
+        _allowNegativeWeights = allowNegativeWeights;
+
+        // Assign a dummy value, so the Check... methods can be called.
+        Error = $"Bug: {nameof(GraphGenerator)} not fully constructed";
+
+        Error = CheckEachInterval()
+             ?? CheckEachCardinality()
+             ?? CheckSizeAgainstOrder()
+             ?? CheckWeightRange();
     }
 
-    internal ClosedInterval Sizes
-    {
-        set => Set(out _sizes, value);
-    }
-
-    internal ClosedInterval Weights
-    {
-        set => Set(out _weights, value);
-    }
-
-    internal bool AllowLoops
-    {
-        set => Set(out _allowLoops, value);
-    }
-
-    internal bool AllowParallelEdges
-    {
-        set => Set(out _allowParallelEdges, value);
-    }
-
-    internal bool UniqueWeights
-    {
-        set => Set(out _uniqueWeights, value);
-    }
-
-    internal bool AllowNegativeWeights
-    {
-        set => Set(out _allowNegativeWeights, value);
-    }
-
-    internal string? Error
-    {
-        get {
-            Check();
-            return _error;
-        }
-    }
-
-    // FIXME: Maybe lock in values once set to avoid race conditions?
+    internal string? Error { get; }
 
     internal IEnumerable<Edge> Generate(Func<int, int, int> prng)
     {
+        if (Error != null) throw new InvalidOperationException(Error);
+
         // FIXME: implement this!
         throw new NotImplementedException();
-    }
-
-    private void Set<T>(out T field, T value)
-    {
-        field = value;
-        _checked = false;
-    }
-
-    private void Check()
-    {
-        if (_checked) return;
-
-        _error = CheckEachInterval()
-              ?? CheckEachCardinality()
-              ?? CheckSizeAgainstOrder()
-              ?? CheckWeightRange();
-
-        _checked = true;
     }
 
     private string? CheckEachInterval()
@@ -191,17 +157,14 @@ internal sealed class GraphGenerator {
         }
     }
 
-    private ClosedInterval _orders;
-    private ClosedInterval _sizes;
-    private ClosedInterval _weights;
+    private readonly ClosedInterval _orders;
+    private readonly ClosedInterval _sizes;
+    private readonly ClosedInterval _weights;
 
-    private bool _allowLoops;
-    private bool _allowParallelEdges;
-    private bool _uniqueWeights;
-    private bool _allowNegativeWeights;
-
-    private bool _checked = false;
-    private string? _error = null;
+    private readonly bool _allowLoops;
+    private readonly bool _allowParallelEdges;
+    private readonly bool _uniqueWeights;
+    private readonly bool _allowNegativeWeights;
 }
 
 /// <summary>Graphical frontend for GraphGenerator.</summary>
@@ -423,20 +386,19 @@ internal sealed class GraphGeneratorDialog : WF.Form {
                         is ClosedInterval weights))
             return null;
 
-        var gen = new GraphGenerator {
-            Orders = orders,
-            Sizes = sizes,
-            Weights = weights,
-            AllowLoops = _allowLoops.Checked,
-            AllowParallelEdges = _allowParallelEdges.Checked,
-            UniqueWeights = _uniqueEdgeWeights.Checked,
-            AllowNegativeWeights = false
-        };
+        var gen = new GraphGenerator(
+                orders: orders,
+                sizes: sizes,
+                weights: weights,
+                allowLoops: _allowLoops.Checked,
+                allowParallelEdges: _allowParallelEdges.Checked,
+                uniqueWeights: _uniqueEdgeWeights.Checked,
+                allowNegativeWeights: false);
 
-        if (gen.Error is string error)
-            StatusError(error);
-        else
+        if (gen.Error == null)
             StatusOk();
+        else
+            StatusError(gen.Error);
 
         return gen;
     }
