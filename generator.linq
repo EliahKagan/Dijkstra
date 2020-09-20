@@ -4,10 +4,59 @@
   <Namespace>System.Drawing</Namespace>
   <Namespace>System.Numerics</Namespace>
   <Namespace>System.Runtime.InteropServices</Namespace>
+  <Namespace>System.Security.Cryptography</Namespace>
+  <Namespace>System.Threading.Tasks</Namespace>
   <Namespace>WF = System.Windows.Forms</Namespace>
 </Query>
 
 #load "./helpers.linq"
+
+internal abstract class LongRandom {
+    static LongRandom()
+        => Debug.Assert(1 << ShiftCount == BufferSize * BitsPerByte);
+
+    internal ulong Next(ulong max)
+    {
+        var mask = Mask(max);
+
+        for (; ; ) {
+            NextBytes(_buffer);
+            var result = BitConverter.ToUInt64(_buffer, 0) & mask;
+            if (result <= max) return result;
+        }
+    }
+
+    private protected abstract void NextBytes(byte[] buffer);
+
+    private const int BitsPerByte = 8;
+    private const int BufferSize = sizeof(ulong); // 8
+    private const int ShiftCount = 6;
+
+    private static ulong Mask(ulong max)
+    {
+        var mask = max;
+        for (var i = 0; i != ShiftCount; ++i) mask |= mask >> (1 << i);
+        return mask;
+    }
+
+    private readonly byte[] _buffer = new byte[BufferSize];
+}
+
+internal sealed class FastLongRandom : LongRandom {
+    private protected override void NextBytes(byte[] buffer)
+        => _random.NextBytes(buffer);
+
+    private readonly Random _random =
+        new Random(RandomNumberGenerator.GetInt32(int.MaxValue));
+}
+
+internal sealed class GoodLongRandom : LongRandom {
+    private protected override void NextBytes(byte[] buffer)
+        => _random.GetBytes(buffer);
+
+    private readonly RandomNumberGenerator _random =
+        RandomNumberGenerator.Create();
+}
 
 /// <summary>Extensions for clearer and more complex regex usage.</summary>
 internal static class MatchExtensions {
@@ -51,10 +100,12 @@ internal readonly struct ClosedInterval {
     }
 
     private static readonly Regex MaybeNegativeIntervalSplitter =
-        new Regex(@"^\s*(-?[^-\s]+)\s*-\s*(-?[^-\s]+)\s*$");
+        new Regex(@"^\s*(-?[^-\s]+)\s*-\s*(-?[^-\s]+)\s*$",
+                  RegexOptions.Compiled);
 
+    // int.Parse tolerates whitespace, no need to parse around it.
     private static readonly Regex NonNegativeIntervalSplitter =
-        new Regex(@"^([^-]+)-([^-]+)$"); // OK, int.Parse tolerates whitespace.
+        new Regex(@"^([^-]+)-([^-]+)$", RegexOptions.Compiled);
 }
 
 /// <summary>
@@ -88,11 +139,14 @@ internal readonly struct GraphGenerator {
 
     internal string? Error { get; }
 
-    internal IEnumerable<Edge> Generate(Func<int, int, int> prng)
+    // FIXME: Return an appropriate type, with both order and all edges.
+    // TODO: At some *future* point, maybe return in batches (reactively?).
+    internal IEnumerable<Edge> Generate(LongRandom prng)
     {
         if (Error != null) throw new InvalidOperationException(Error);
 
         // FIXME: implement this!
+        Thread.Sleep(2000);
         throw new NotImplementedException();
     }
 
@@ -347,18 +401,36 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         if (e.KeyCode == WF.Keys.F7) ApplyStatusCaretPreference();
     }
 
-    private void generate_Click(object? sender, EventArgs e)
+    private async void generate_Click(object? sender, EventArgs e)
     {
-        // FIXME: actually implement this
-        WF.MessageBox.Show("Hello, world!");
+        if (!(ReadState() is GraphGenerator generator)) {
+            Warn("\"Generate\" button enabled with unusable parameters");
+            return;
+        }
+
+        TurnKnobsOff();
+        _generate.Text = "Generating...";
+        _generate.Enabled = false;
+        _cancel.Enabled = true;
+        try {
+            var prng = GetPrng();
+
+            // FIXME: This needs to actually get the results!
+            await Task.Run(() => generator.Generate(prng));
+        } finally {
+            _cancel.Text = "Cancel";
+            _cancel.Enabled = false;
+            _generate.Enabled = true;
+            _generate.Text = "Generate";
+            TurnKnobsOn();
+        }
     }
 
     private void cancel_Click(object? sender, EventArgs e)
     {
-        // FIXME: implement the actual cancellation logic!
-
+        _cancel.Text = "Cancelling...";
         _cancel.Enabled = false;
-        ReadState(); // TODO: Do I want this, or a cancellation notice?
+        // FIXME: implement the actual cancellation logic!
     }
 
     private void SetToolTip(WF.Control control, string text)
@@ -386,7 +458,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
                         is ClosedInterval weights))
             return null;
 
-        var gen = new GraphGenerator(
+        var generator = new GraphGenerator(
                 orders: orders,
                 sizes: sizes,
                 weights: weights,
@@ -395,12 +467,12 @@ internal sealed class GraphGeneratorDialog : WF.Form {
                 uniqueWeights: _uniqueEdgeWeights.Checked,
                 allowNegativeWeights: false);
 
-        if (gen.Error == null)
+        if (generator.Error == null)
             StatusOk();
         else
-            StatusError(gen.Error);
+            StatusError(generator.Error);
 
-        return gen;
+        return generator;
     }
 
     private ClosedInterval? ReadClosedInterval(WF.TextBox textBox,
@@ -462,14 +534,49 @@ internal sealed class GraphGeneratorDialog : WF.Form {
             if (ShowCaret(_status.Handle))
                 _haveStatusCaret = true;
             else
-                "Failure showing generator status caret".Dump();
+                Warn("Failure showing generator status caret");
         } else {
             if (HideCaret(_status.Handle))
                 _haveStatusCaret = false;
             else
-                "Failure hiding generator status caret".Dump();
+                Warn("Failure hiding generator status caret");
         }
     }
+
+    void TurnKnobsOff()
+    {
+        foreach (var control in Knobs) control.Enabled = false;
+    }
+
+    void TurnKnobsOn()
+    {
+        foreach (var control in Knobs) control.Enabled = true;
+    }
+
+    private IEnumerable<WF.Control> Knobs
+    {
+        get {
+            yield return _order;
+            yield return _size;
+            yield return _weights;
+
+            yield return _allowLoops;
+            yield return _allowParallelEdges;
+            yield return _uniqueEdgeWeights;
+            yield return _highQualityRandomness;
+        }
+    }
+
+    private LongRandom GetPrng()
+    {
+        if (_highQualityRandomness.Checked)
+            return _goodPrng ??= new GoodLongRandom();
+        else
+            return _fastPrng ??= new FastLongRandom();
+    }
+
+    private void Warn(string message)
+        => message.Dump($"Warning ({nameof(GraphGeneratorDialog)})");
 
     private readonly WF.Label _orderLabel = new WF.Label {
         Text = "Order",
@@ -574,10 +681,11 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private readonly WF.ToolTip _toolTip = new WF.ToolTip();
 
     private bool _formShownBefore = false;
-
     private bool _wantStatusCaret = false;
-
     private bool _haveStatusCaret = true;
+
+    private FastLongRandom? _fastPrng = null;
+    private GoodLongRandom? _goodPrng = null;
 }
 
 /// <summary>
@@ -587,6 +695,10 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 private static void Main()
 {
     var dialog = new GraphGeneratorDialog();
-    new LC.Button("Generate...", delegate { dialog.DisplayDialog(); }).Dump();
+
+    new LC.Button("Open Graph Generator...", delegate {
+        dialog.DisplayDialog();
+    }).Dump();
+
     dialog.DisplayDialog();
 }
