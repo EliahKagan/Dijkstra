@@ -1,104 +1,67 @@
-<Query Kind="Statements">
+<Query Kind="Program">
   <Namespace>System.Runtime.InteropServices</Namespace>
   <Namespace>System.Security.Cryptography</Namespace>
 </Query>
 
-#define LOOP_MASK
-//#define LOOP_MASK_CHECK
-//#define STACK_BUFFER
-#define WITHOUT_DO_WHILE
+internal abstract class LongRandom {
+    static LongRandom()
+        => Debug.Assert(1 << ShiftCount == BufferSize * BitsPerByte);
 
-var random = new Random(RandomNumberGenerator.GetInt32(int.MaxValue));
-var buffer = new byte[sizeof(ulong)];
+    internal virtual ulong Next(ulong max)
+    {
+        var mask = Mask(max);
 
-#if LOOP_MASK
-#if LOOP_MASK_CHECK
-static ulong CheckMask(ulong max)
-{
-    var mask = max;
-    mask |= mask >> 1;
-    mask |= mask >> 2;
-    mask |= mask >> 4;
-    mask |= mask >> 8;
-    mask |= mask >> 16;
-    mask |= mask >> 32;
-    return mask;
-}
-#endif // ! LOOP_MASK_CHECK
-
-static ulong Mask(ulong max)
-{
-    var mask = max;
-    for (var i = 0; i != 6; ++i) mask |= mask >> (1 << i);
-    //for (var shift = 1; shift != sizeof(ulong) * 8; shift <<= 1)
-    //    mask |= mask >> shift;
-#if LOOP_MASK_CHECK
-    Debug.Assert(mask == CheckMask(max));
-#endif
-    return mask;
-}
-#else
-static ulong Mask(ulong max)
-{
-    var mask = max;
-    mask |= mask >> 1;
-    mask |= mask >> 2;
-    mask |= mask >> 4;
-    mask |= mask >> 8;
-    mask |= mask >> 16;
-    mask |= mask >> 32;
-    return mask;
-}
-#endif // ! LOOP_MASK
-
-#if STACK_BUFFER
-ulong Next(ulong max)
-{
-    var mask = Mask(max);
-
-    Span<ulong> res = stackalloc ulong[1];
-    do {
-        random.NextBytes(MemoryMarshal.AsBytes(res));
-    } while ((res[0] &= mask) > max);
-
-    return res[0];
-}
-#elif WITHOUT_DO_WHILE
-ulong Next(ulong max)
-{
-    var mask = Mask(max);
-
-    for (; ; ) {
-        random.NextBytes(buffer);
-        var result = BitConverter.ToUInt64(buffer, 0) & mask;
-        if (result <= max) return result;
+        for (; ; ) {
+            NextBytes(_buffer);
+            var result = BitConverter.ToUInt64(_buffer, 0) & mask;
+            if (result <= max) return result;
+        }
     }
-}
-#else
-ulong Next(ulong max)
-{
-    var mask = Mask(max);
 
-    ulong result;
-    do {
-        random.NextBytes(buffer);
-        result = BitConverter.ToUInt64(buffer, 0) & mask;
-    } while (result > max);
+    private protected abstract void NextBytes(byte[] buffer);
 
-    return result;
-}
-#endif // ! STACK_BUFFER
+    private const int BitsPerByte = 8;
+    private const int BufferSize = sizeof(ulong); // 8
+    private const int ShiftCount = 6;
 
-const ulong max = (1uL << 63) + 1uL;
-var acc = 0uL;
-for (var i = 0; i != 100_000_000; ++i) {
-    unchecked {
-        acc += Next(max);
+    private static ulong Mask(ulong max)
+    {
+        var mask = max;
+        for (var i = 0; i != ShiftCount; ++i) mask |= mask >> (1 << i);
+        return mask;
     }
-}
-acc.Dump();
 
-//const int max = 20;
-//var freqs = new int[max + 1];
-//for (var i = 0; i < 10; ++i) ++freqs[(int)Next(max)];
-//freqs.Dump(nameof(freqs));
+    private readonly byte[] _buffer = new byte[BufferSize];
+}
+
+internal sealed class FastLongRandom : LongRandom {
+    internal override ulong Next(ulong max)
+        => max < int.MaxValue ? (ulong)_random.Next((int)max + 1)
+                              : base.Next(max);
+
+    private protected override void NextBytes(byte[] buffer)
+        => _random.NextBytes(buffer);
+
+    private readonly Random _random =
+        new Random(RandomNumberGenerator.GetInt32(int.MaxValue));
+}
+
+private static void Main()
+{
+    LongRandom prng = new FastLongRandom();
+
+    //const ulong max = (1uL << 63) + 1uL;
+    const ulong max = 1_000_000_000;
+    var acc = 0uL;
+    for (var i = 0; i != 100_000_000; ++i) {
+        unchecked {
+            acc += prng.Next(max);
+        }
+    }
+    acc.Dump();
+
+    //const int max = 20;
+    //var freqs = new int[max + 1];
+    //for (var i = 0; i < 10; ++i) ++freqs[(int)Next(max)];
+    //freqs.Dump(nameof(freqs));
+}

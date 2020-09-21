@@ -15,7 +15,7 @@ internal abstract class LongRandom {
     static LongRandom()
         => Debug.Assert(1 << ShiftCount == BufferSize * BitsPerByte);
 
-    internal ulong Next(ulong max)
+    internal virtual ulong Next(ulong max)
     {
         var mask = Mask(max);
 
@@ -43,6 +43,10 @@ internal abstract class LongRandom {
 }
 
 internal sealed class FastLongRandom : LongRandom {
+    internal override ulong Next(ulong max)
+        => max < int.MaxValue ? (ulong)_random.Next((int)max + 1)
+                              : base.Next(max);
+
     private protected override void NextBytes(byte[] buffer)
         => _random.NextBytes(buffer);
 
