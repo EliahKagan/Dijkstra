@@ -11,58 +11,7 @@
 
 #load "./helpers.linq"
 
-internal abstract class LongRandom {
-    static LongRandom()
-        => Debug.Assert(1 << ShiftCount == BufferSize * BitsPerByte);
-
-    internal virtual ulong Next(ulong max)
-    {
-        var mask = Mask(max);
-
-        for (; ; ) {
-            NextBytes(_buffer);
-            var result = BitConverter.ToUInt64(_buffer, 0) & mask;
-            if (result <= max) return result;
-        }
-    }
-
-    private protected abstract void NextBytes(byte[] buffer);
-
-    private const int BitsPerByte = 8;
-    private const int BufferSize = sizeof(ulong); // 8
-    private const int ShiftCount = 6;
-
-    private static ulong Mask(ulong max)
-    {
-        var mask = max;
-        for (var i = 0; i != ShiftCount; ++i) mask |= mask >> (1 << i);
-        return mask;
-    }
-
-    private readonly byte[] _buffer = new byte[BufferSize];
-}
-
-internal sealed class FastLongRandom : LongRandom {
-    internal override ulong Next(ulong max)
-        => max < int.MaxValue ? (ulong)_random.Next((int)max + 1)
-                              : base.Next(max);
-
-    private protected override void NextBytes(byte[] buffer)
-        => _random.NextBytes(buffer);
-
-    private readonly Random _random =
-        new Random(RandomNumberGenerator.GetInt32(int.MaxValue));
-}
-
-internal sealed class GoodLongRandom : LongRandom {
-    private protected override void NextBytes(byte[] buffer)
-        => _random.GetBytes(buffer);
-
-    private readonly RandomNumberGenerator _random =
-        RandomNumberGenerator.Create();
-}
-
-/// <summary>Extensions for clearer and more complex regex usage.</summary>
+/// <summary>Extensions for clearer and more compact regex usage.</summary>
 internal static class MatchExtensions {
     internal static string Group(this Match match, int index)
         => match.Groups[index].ToString();
@@ -112,6 +61,69 @@ internal readonly struct ClosedInterval {
         new Regex(@"^([^-]+)-([^-]+)$", RegexOptions.Compiled);
 }
 
+internal abstract class LongRandom {
+    static LongRandom()
+        => Debug.Assert(1 << ShiftCount == BufferSize * BitsPerByte);
+
+    internal virtual ulong Next(ulong max)
+    {
+        var mask = Mask(max);
+
+        for (; ; ) {
+            NextBytes(_buffer);
+            var result = BitConverter.ToUInt64(_buffer, 0) & mask;
+            if (result <= max) return result;
+        }
+    }
+
+    /// <summary>Quickly pick an integer from a small range.</summary>
+    /// <remarks>
+    /// Assumes <c>min</c> is no greater than <c>max</c> and the number of
+    /// values in this (inclusive) range is strictly less than
+    /// <c>int.MaxValue</c>.
+    /// </remarks>
+    internal virtual int NextInt32(int min, int max)
+        => min + (int)Next((ulong)(max - min));
+
+    private protected abstract void NextBytes(byte[] buffer);
+
+    private const int BitsPerByte = 8;
+    private const int BufferSize = sizeof(ulong); // 8
+    private const int ShiftCount = 6;
+
+    private static ulong Mask(ulong max)
+    {
+        var mask = max;
+        for (var i = 0; i != ShiftCount; ++i) mask |= mask >> (1 << i);
+        return mask;
+    }
+
+    private readonly byte[] _buffer = new byte[BufferSize];
+}
+
+internal sealed class FastLongRandom : LongRandom {
+    internal override ulong Next(ulong max)
+        => max < int.MaxValue ? (ulong)_random.Next((int)max + 1)
+                              : base.Next(max);
+
+    internal override int NextInt32(int min, int max)
+        => _random.Next(min, max + 1);
+
+    private protected override void NextBytes(byte[] buffer)
+        => _random.NextBytes(buffer);
+
+    private readonly Random _random =
+        new Random(RandomNumberGenerator.GetInt32(int.MaxValue));
+}
+
+internal sealed class GoodLongRandom : LongRandom {
+    private protected override void NextBytes(byte[] buffer)
+        => _random.GetBytes(buffer);
+
+    private readonly RandomNumberGenerator _random =
+        RandomNumberGenerator.Create();
+}
+
 /// <summary></summary>
 internal readonly struct LazyGraph {
     internal LazyGraph(int order, int size, IEnumerable<Edge> edges)
@@ -157,13 +169,19 @@ internal readonly struct GraphGenerator {
 
     internal string? Error { get; }
 
+    // TODO: Figure out if this should use IObservable instead.
     internal LazyGraph Generate(LongRandom prng)
     {
         if (Error != null) throw new InvalidOperationException(Error);
 
-        // FIXME: implement this!
-        Thread.Sleep(2000);
-        throw new NotImplementedException();
+        var order = prng.NextInt32(_orders.Min, _orders.Max);
+        var size = prng.NextInt32(_sizes.Min, ComputeMaxSize(order));
+        return new LazyGraph(order, size, EmitEdges(prng, order, size));
+    }
+
+    private IEnumerable<Edge> EmitEdges(LongRandom prng, int order, int size)
+    {
+        // FIXME: implement this
     }
 
     private string? CheckEachInterval()
@@ -187,16 +205,16 @@ internal readonly struct GraphGenerator {
 
     private string? CheckSizeAgainstOrder()
     {
-        if (MaxSize < _sizes.Min) { // Note: This is a *lifted* < comparison.
-            return (_orders.Max, MaxSize) switch {
-                (1,         1) => $"1 vertex allows only 1 edge",
-                (1,     var m) => $"1 vertex allows only {m} edges",
-                (var n,     1) => $"{n} vertices allow only 1 edge", // Unused.
-                (var n, var m) => $"{n} vertices allow only {m} edges"
-            };
-        }
+        var maxSize = ComputeMaxSize(_orders.Max);
 
-        return null;
+        if (_sizes.Min <= maxSize) return null;
+
+        return (_orders.Max, maxSize) switch {
+            (1, 1) => $"1 vertex allows only 1 edge",
+            (1, _) => $"1 vertex allows only {maxSize} edges",
+            (_, 1) => $"{_orders.Max} vertices allow only 1 edge", // Unused.
+            (_, _) => $"{_orders.Max} vertices allow only {maxSize} edges"
+        };
     }
 
     private string? CheckWeightRange()
@@ -217,15 +235,15 @@ internal readonly struct GraphGenerator {
         return null;
     }
 
-    private long? MaxSize
+    private int ComputeMaxSize(int order)
     {
-        get {
-            if (_orders.Max == 0) return 0;
-            if (_allowParallelEdges) return null;
-            var maxOrder = (long)_orders.Max;
-            return maxOrder * (_allowLoops ? maxOrder : maxOrder - 1);
-        }
+        if (order == 0) return 0;
+        if (_allowParallelEdges) return _sizes.Max;
+        return (int)Math.Min(_sizes.Max, ComputeCompleteSize(order));
     }
+
+    private long ComputeCompleteSize(long order)
+        => order * (_allowLoops ? order : order - 1);
 
     private readonly ClosedInterval _orders;
     private readonly ClosedInterval _sizes;
@@ -425,7 +443,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         }
 
         TurnKnobsOff();
-        _generate.Text = "Generating...";
+        _generate.Text = "Working...";
         _generate.Enabled = false;
         _cancel.Enabled = true;
         try {
