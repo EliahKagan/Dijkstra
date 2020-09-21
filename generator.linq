@@ -108,9 +108,23 @@ internal readonly struct ClosedInterval {
         new Regex(@"^([^-]+)-([^-]+)$", RegexOptions.Compiled);
 }
 
+/// <summary></summary>
+internal readonly struct LazyGraph {
+    internal LazyGraph(int order, int size, IEnumerable<Edge> edges)
+        => (Order, Size, Edges) = (order, size, edges);
+
+    internal int Order { get; }
+
+    // TODO: Should giant graphs, of over int.MaxValue edges, be supported?
+    internal int Size { get; }
+
+    internal IEnumerable<Edge> Edges { get; }
+}
+
 /// <summary>
 /// Randomly generates a graph description from specified constraints.
 /// </summary>
+// FIXME: It seems like this should be a reference type. Figure that out.
 internal readonly struct GraphGenerator {
     internal GraphGenerator(ClosedInterval orders,
                             ClosedInterval sizes,
@@ -139,9 +153,7 @@ internal readonly struct GraphGenerator {
 
     internal string? Error { get; }
 
-    // FIXME: Return an appropriate type, with both order and all edges.
-    // TODO: At some *future* point, maybe return in batches (reactively?).
-    internal IEnumerable<Edge> Generate(LongRandom prng)
+    internal LazyGraph Generate(LongRandom prng)
     {
         if (Error != null) throw new InvalidOperationException(Error);
 
@@ -173,9 +185,9 @@ internal readonly struct GraphGenerator {
     {
         if (MaxSize < _sizes.Min) { // Note: This is a *lifted* < comparison.
             return (_orders.Max, MaxSize) switch {
-                (1, 1)         => $"1 vertex allows only 1 edge",
-                (1, var m)     => $"1 vertex allows only {m} edges",
-                (var n, 1)     => $"{n} vertices allow only 1 edge", // Unused.
+                (1,         1) => $"1 vertex allows only 1 edge",
+                (1,     var m) => $"1 vertex allows only {m} edges",
+                (var n,     1) => $"{n} vertices allow only 1 edge", // Unused.
                 (var n, var m) => $"{n} vertices allow only {m} edges"
             };
         }
@@ -191,9 +203,9 @@ internal readonly struct GraphGenerator {
         // If weights must be unique, ensure the *whole* size range is okay.
         if (_uniqueWeights && _weights.Count < _sizes.Max) {
             return (_sizes.Max, _weights.Count) switch {
-                (1, 1) => $"1 edge but only 1 weight", // Unused.
-                (1, var w) => $"1 edge but only {w} weights", // Unused.
-                (var n, 1) => $"{n} edges but only 1 weight",
+                (1,         1) => $"1 edge but only 1 weight", // Unused.
+                (1,     var w) => $"1 edge but only {w} weights", // Unused.
+                (var n,     1) => $"{n} edges but only 1 weight",
                 (var n, var w) => $"{n} edges but only {w} weights"
             };
         }
@@ -507,7 +519,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         _status.ForeColor = Color.Green;
         _status.Text = "OK";
         SetStatusToolTip();
-        if (!_cancel.Enabled) _generate.Enabled = true;
+        _generate.Enabled = true;
     }
 
     private void StatusError(string message)
