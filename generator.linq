@@ -432,13 +432,13 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private void SubscribeChildControlEvents()
     {
-        _order.TextChanged += StateChanged;
-        _size.TextChanged += StateChanged;
-        _weights.TextChanged += StateChanged;
-        _allowLoops.CheckedChanged += StateChanged;
-        _allowParallelEdges.CheckedChanged += StateChanged;
-        _uniqueEdgeWeights.CheckedChanged += StateChanged;
-        _highQualityRandomness.CheckedChanged += StateChanged;
+        _order.TextChanged += InvalidateGenerator;
+        _size.TextChanged += InvalidateGenerator;
+        _weights.TextChanged += InvalidateGenerator;
+        _allowLoops.CheckedChanged += InvalidateGenerator;
+        _allowParallelEdges.CheckedChanged += InvalidateGenerator;
+        _uniqueEdgeWeights.CheckedChanged += InvalidateGenerator;
+        _highQualityRandomness.CheckedChanged += InvalidateGenerator;
 
         SubscribeNormalizer(_order, NormalizeAsValueOrClosedInterval);
         SubscribeNormalizer(_size, NormalizeAsValueOrClosedInterval);
@@ -567,7 +567,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private void SetToolTips(string text, params WF.Control[] controls)
         => Array.ForEach(controls, control => SetToolTip(control, text));
 
-    private void StateChanged(object? sender, EventArgs e)
+    private void InvalidateGenerator(object? sender, EventArgs e)
     {
         if (_formShownBefore) ReadState();
     }
