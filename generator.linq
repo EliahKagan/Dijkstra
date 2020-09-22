@@ -76,7 +76,7 @@ internal abstract class LongRandom {
         }
     }
 
-    /// <summary>Quickly pick an integer from a small range.</summary>
+    /// <summary>Quickly picks an integer from a small range.</summary>
     /// <remarks>
     /// Assumes <c>min</c> is no greater than <c>max</c> and the number of
     /// values in this (inclusive) range is strictly less than
@@ -102,6 +102,11 @@ internal abstract class LongRandom {
 }
 
 internal sealed class FastLongRandom : LongRandom {
+    internal FastLongRandom()
+        : this(RandomNumberGenerator.GetInt32(int.MaxValue)) { }
+
+    internal FastLongRandom(int seed) => _random = new Random(seed);
+
     internal override ulong Next(ulong max)
         => max < int.MaxValue ? (ulong)_random.Next((int)max + 1)
                               : base.Next(max);
@@ -112,8 +117,7 @@ internal sealed class FastLongRandom : LongRandom {
     private protected override void NextBytes(byte[] buffer)
         => _random.NextBytes(buffer);
 
-    private readonly Random _random =
-        new Random(RandomNumberGenerator.GetInt32(int.MaxValue));
+    private readonly Random _random;
 }
 
 internal sealed class GoodLongRandom : LongRandom {
@@ -122,6 +126,30 @@ internal sealed class GoodLongRandom : LongRandom {
 
     private readonly RandomNumberGenerator _random =
         RandomNumberGenerator.Create();
+}
+
+internal sealed class DistinctSampler {
+    internal DistinctSampler(LongRandom prng, ulong upperExclusive)
+        => (_prng, _size) = (prng, upperExclusive);
+
+    internal ulong Next()
+    {
+        if (_size == 0)
+            throw new InvalidOperationException("sample space exhausted");
+
+        var key = _prng.Next(--_size);
+        var value = _remap.GetValueOrDefault(key, key);
+        _remap[key] = _remap.GetValueOrDefault(_size, _size);
+        return value;
+    }
+
+    private readonly LongRandom _prng;
+
+    private readonly Dictionary<ulong, ulong> _remap =
+        new Dictionary<ulong, ulong>();
+
+    /// <summary>The number of values remaining to hand out.</summary>
+    private ulong _size;
 }
 
 /// <summary></summary>
@@ -181,7 +209,12 @@ internal readonly struct GraphGenerator {
 
     private IEnumerable<Edge> EmitEdges(LongRandom prng, int order, int size)
     {
-        // FIXME: implement this
+
+
+        //if (_allowParallelEdges) {
+        //
+        //} else {
+        //}
     }
 
     private string? CheckEachInterval()

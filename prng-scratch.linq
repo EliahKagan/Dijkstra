@@ -18,6 +18,15 @@ internal abstract class LongRandom {
         }
     }
 
+    /// <summary>Quickly picks an integer from a small range.</summary>
+    /// <remarks>
+    /// Assumes <c>min</c> is no greater than <c>max</c> and the number of
+    /// values in this (inclusive) range is strictly less than
+    /// <c>int.MaxValue</c>.
+    /// </remarks>
+    internal virtual int NextInt32(int min, int max)
+        => min + (int)Next((ulong)(max - min));
+
     private protected abstract void NextBytes(byte[] buffer);
 
     private const int BitsPerByte = 8;
@@ -35,33 +44,79 @@ internal abstract class LongRandom {
 }
 
 internal sealed class FastLongRandom : LongRandom {
+    internal FastLongRandom()
+        : this(RandomNumberGenerator.GetInt32(int.MaxValue)) { }
+
+    internal FastLongRandom(int seed) => _random = new Random(seed);
+
     internal override ulong Next(ulong max)
-        => max < int.MaxValue ? (ulong)_random.Next((int)max + 1)
-                              : base.Next(max);
+        => max < int.MaxValue ? (ulong)_random.Next((int)max + 1).Dump("special")
+                              : base.Next(max).Dump("general");
+
+    internal override int NextInt32(int min, int max)
+        => _random.Next(min, max + 1);
 
     private protected override void NextBytes(byte[] buffer)
         => _random.NextBytes(buffer);
 
-    private readonly Random _random =
-        new Random(RandomNumberGenerator.GetInt32(int.MaxValue));
+    private readonly Random _random;
+}
+
+internal sealed class GoodLongRandom : LongRandom {
+    private protected override void NextBytes(byte[] buffer)
+        => _random.GetBytes(buffer);
+
+    private readonly RandomNumberGenerator _random =
+        RandomNumberGenerator.Create();
+}
+
+internal sealed class DistinctSampler {
+    internal DistinctSampler(LongRandom prng, ulong upperExclusive)
+        => (_prng, _size) = (prng, upperExclusive);
+
+    internal ulong Next()
+    {
+        if (_size == 0)
+            throw new InvalidOperationException("sample space exhausted");
+
+        var key = _prng.Next(--_size);
+        var value = _remap.GetValueOrDefault(key, key);
+        _remap[key] = _remap.GetValueOrDefault(_size, _size);
+        return value;
+    }
+
+    private readonly LongRandom _prng;
+
+    private readonly Dictionary<ulong, ulong> _remap =
+        new Dictionary<ulong, ulong>();
+
+    /// <summary>The number of values remaining to hand out.</summary>
+    private ulong _size;
 }
 
 private static void Main()
 {
-    LongRandom prng = new FastLongRandom();
+    const ulong n = int.MaxValue + 50uL;
+    const int k = 100;
 
-    //const ulong max = (1uL << 63) + 1uL;
-    const ulong max = 1_000_000_000;
-    var acc = 0uL;
-    for (var i = 0; i != 100_000_000; ++i) {
-        unchecked {
-            acc += prng.Next(max);
-        }
-    }
-    acc.Dump();
+    var sampler = new DistinctSampler(new FastLongRandom(), n);
 
-    //const int max = 20;
-    //var freqs = new int[max + 1];
-    //for (var i = 0; i < 10; ++i) ++freqs[(int)Next(max)];
-    //freqs.Dump(nameof(freqs));
+#if false
+    k.Dump();
+
+    Enumerable.Range(0, k)
+              .Select(_ => sampler.Next())
+              .Distinct()
+              .Count()
+              .Dump();
+#else
+    var samples = Enumerable.Range(0, k)
+                            .Select(_ => sampler.Next())
+                            .ToList();
+
+    var distinct = samples.Distinct().ToList();
+
+    Util.HorizontalRun(withGaps: true, samples.Count, distinct.Count).Dump();
+    Util.HorizontalRun(withGaps: true, samples, distinct).Dump();
+#endif
 }
