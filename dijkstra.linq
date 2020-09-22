@@ -784,6 +784,10 @@ internal sealed class DotCode {
         proc.WaitForExit();
         // FIXME: Look at exit code?
 
+        // TODO: Offer to run "dot -c" for the user, if dot fails and reports:
+        //   Format: "svg" not recognized. Use one of:
+        // (When this problem happens, usually that is the full message.)
+
         return Util.RawHtml(File.ReadAllText(svgPath));
     }
 
