@@ -3,7 +3,7 @@
 </Query>
 
 /// <summary>Configuration options not exposed by the controller.</summary>
-internal static class Configuration {
+internal static class Options {
     internal static bool DisableControlsWhileProcessing => true;
     internal static bool OfferWrongQueue => false;
     internal static bool DebugFibonacciHeap => false;
@@ -294,7 +294,7 @@ internal sealed class FibonacciHeap<TKey, TValue>
 
         var node = ExtractMinNode();
         _map.Remove(node.Key);
-        if (Configuration.DebugFibonacciHeap) this.Dump(noTotals: true);
+        if (Options.DebugFibonacciHeap) this.Dump(noTotals: true);
         return KeyValuePair.Create(node.Key, node.Value);
     }
 
@@ -491,7 +491,8 @@ internal sealed class WrongQueue<TKey, TValue> : IPriorityQueue<TKey, TValue> {
 
     public KeyValuePair<TKey, TValue> ExtractMin()
         => throw new InvalidOperationException(
-            "Can't extract from WrongQueue, which only pretends to take input");
+                $"Can't extract from {nameof(WrongQueue<TKey, TValue>)},"
+                + " which only pretends to take input");
 }
 
 /// <summary>An edge in a weighted directed graph.</summary>
@@ -899,18 +900,18 @@ internal sealed class Controller {
 
         PopulatePriorityQueueControls(priorityQueues);
 
-        _parentsTable = new CheckBox("parents table", false, OnConfig);
-        _edgeSelection = new CheckBox("edge selection", false, OnConfig);
-        _dotCode = new CheckBox("DOT code", false, OnConfig);
-        _drawing = new CheckBox("graph drawing", true, OnConfig);
+        _parentsTable = new CheckBox("parents table", false, Configure);
+        _edgeSelection = new CheckBox("edge selection", false, Configure);
+        _dotCode = new CheckBox("DOT code", false, Configure);
+        _drawing = new CheckBox("graph drawing", true, Configure);
 
         _outputConfig = new WrapPanel(_parentsTable,
                                       _edgeSelection,
                                       _dotCode,
                                       _drawing);
 
-        _run = new Button("Run", OnRun);
-        _buttons = new WrapPanel(_run, new Button("Clear", OnClear));
+        _run = new Button("Run", run_Click);
+        _buttons = new WrapPanel(_run, new Button("Clear", clear_Click));
     }
 
     private void
@@ -929,11 +930,13 @@ internal sealed class Controller {
                 boundType.CreateSupplier<IPriorityQueue<int, long>>();
 
             _pqSuppliers.Add(label, supplier);
-            _pqConfig.Children.Add(new CheckBox(label, pq.Selected, OnConfig));
+
+            var pqCheckBox = new CheckBox(label, pq.Selected, Configure);
+            _pqConfig.Children.Add(pqCheckBox);
         }
     }
 
-    private void OnRun(Button sender)
+    private void run_Click(Button sender)
     {
         MaybeDisableAllControls();
         try {
@@ -991,7 +994,7 @@ internal sealed class Controller {
                                 message: "wrong record length"))
                  .ToArray();
 
-    private void OnClear(Button sender)
+    private void clear_Click(Button sender)
     {
         var order = _order.Text;
         var edges = _edges.Text;
@@ -1010,7 +1013,7 @@ internal sealed class Controller {
         Show();
     }
 
-    private void OnConfig(CheckBox? sender)
+    private void Configure(CheckBox sender)
     {
         static bool AnyChecked(WrapPanel panel)
             => panel.Children.Cast<CheckBox>().Any(cb => cb.Checked);
@@ -1020,13 +1023,13 @@ internal sealed class Controller {
 
     void MaybeDisableAllControls()
     {
-        if (Configuration.DisableControlsWhileProcessing)
+        if (Options.DisableControlsWhileProcessing)
             foreach (var control in Controls) control.Enabled = false;
     }
 
     void MaybeEnableAllControls()
     {
-        if (Configuration.DisableControlsWhileProcessing)
+        if (Options.DisableControlsWhileProcessing)
             foreach (var control in Controls) control.Enabled = true;
     }
 
@@ -1100,7 +1103,7 @@ private static Controller BuildController()
         .PQ(typeof(BinaryHeap<,>))
         .PQ(typeof(FibonacciHeap<,>));
 
-    if (Configuration.OfferWrongQueue)
+    if (Options.OfferWrongQueue)
         builder.PQ(typeof(WrongQueue<,>), selected: false);
 
     return builder.Build();
