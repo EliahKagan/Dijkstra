@@ -10,4 +10,6 @@ internal readonly struct Edge {
     internal int Dest { get; }
 
     internal int Weight { get; }
+
+    private object ToDump() => new { Src, Dest, Weight };
 }

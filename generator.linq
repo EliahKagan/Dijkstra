@@ -137,7 +137,7 @@ internal sealed class DistinctSampler {
         if (_size == 0)
             throw new InvalidOperationException("sample space exhausted");
 
-        var key = _prng.Next(--_size);
+        var key = _prng.Next(max: --_size);
         var value = _remap.GetValueOrDefault(key, key);
         _remap[key] = _remap.GetValueOrDefault(_size, _size);
         return value;
@@ -163,20 +163,22 @@ internal readonly struct LazyGraph {
     internal int Size { get; }
 
     internal IEnumerable<Edge> Edges { get; }
+
+    private object ToDump() => new { Order, Size, Edges };
 }
 
 /// <summary>
 /// Randomly generates a graph description from specified constraints.
 /// </summary>
-// FIXME: It seems like this should be a reference type. Figure that out.
-internal readonly struct GraphGenerator {
+internal sealed class GraphGenerator {
     internal GraphGenerator(ClosedInterval orders,
                             ClosedInterval sizes,
                             ClosedInterval weights,
                             bool allowLoops,
                             bool allowParallelEdges,
                             bool uniqueWeights,
-                            bool allowNegativeWeights)
+                            bool allowNegativeWeights,
+                            LongRandom prng)
     {
         _orders = orders;
         _sizes = sizes;
@@ -185,6 +187,7 @@ internal readonly struct GraphGenerator {
         _allowParallelEdges = allowParallelEdges;
         _uniqueWeights = uniqueWeights;
         _allowNegativeWeights = allowNegativeWeights;
+        _prng = prng;
 
         // Assign a dummy value, so the Check... methods can be called.
         Error = $"Bug: {nameof(GraphGenerator)} not fully constructed";
@@ -198,23 +201,78 @@ internal readonly struct GraphGenerator {
     internal string? Error { get; }
 
     // TODO: Figure out if this should use IObservable instead.
-    internal LazyGraph Generate(LongRandom prng)
+    internal LazyGraph Generate()
     {
         if (Error != null) throw new InvalidOperationException(Error);
 
-        var order = prng.NextInt32(_orders.Min, _orders.Max);
-        var size = prng.NextInt32(_sizes.Min, ComputeMaxSize(order));
-        return new LazyGraph(order, size, EmitEdges(prng, order, size));
+        var order = _prng.NextInt32(_orders.Min, _orders.Max);
+        var size = _prng.NextInt32(_sizes.Min, ComputeMaxSize(order));
+        return new LazyGraph(order, size, EmitEdges(order, size));
     }
 
-    private IEnumerable<Edge> EmitEdges(LongRandom prng, int order, int size)
+    private IEnumerable<Edge> EmitEdges(int order, int size)
     {
+        Debug.Assert(order >= 0 && size >= 0);
 
+        var nextEndpoints = CreateEndpointsGenerator(order);
+        var nextWeight = CreateWeightGenerator();
 
-        //if (_allowParallelEdges) {
-        //
-        //} else {
-        //}
+        for (var i = 0; i < size; ++i) {
+            var (src, dest) = nextEndpoints();
+            yield return new Edge(src, dest, nextWeight());
+        }
+    }
+
+    private Func<(int src, int dest)> CreateEndpointsGenerator(int order)
+    {
+        var decode = CreateEndpointsDecoder(order);
+        var next = CreateEncodedEndpointsGenerator(order);
+        return () => decode(next());
+    }
+
+    private Func<ulong> CreateEncodedEndpointsGenerator(int order)
+    {
+        var cardinality = (ulong)ComputeCompleteSize(order);
+
+        if (_allowParallelEdges)
+            return () => _prng.Next(max: cardinality - 1);
+
+        return new DistinctSampler(_prng, upperExclusive: cardinality).Next;
+    }
+
+    private Func<ulong, (int src, int dest)>
+    CreateEndpointsDecoder(int order)
+    {
+        var longOrder = (ulong)order;
+
+        if (_allowLoops) {
+            return encodedEndpoints => {
+                var src = encodedEndpoints / longOrder;
+                var dest = encodedEndpoints % longOrder;
+                return (src: (int)src, dest: (int)dest);
+            };
+        }
+        return encodedEndpoints => {
+            var src = encodedEndpoints / (longOrder - 1);
+            var dest = encodedEndpoints % (longOrder - 1);
+            if (src <= dest) ++dest;
+            return (src: (int)src, dest: (int)dest);
+        };
+    }
+
+    private Func<int> CreateWeightGenerator()
+    {
+        var count = (ulong)_weights.Count;
+
+        int Bias(ulong zeroBasedWeight)
+            => (int)(_weights.Min + (long)zeroBasedWeight);
+
+        if (_uniqueWeights) {
+            var sampler = new DistinctSampler(_prng, upperExclusive: count);
+            return () => Bias(sampler.Next());
+        }
+
+        return () => Bias(_prng.Next(max: count - 1));
     }
 
     private string? CheckEachInterval()
@@ -286,6 +344,8 @@ internal readonly struct GraphGenerator {
     private readonly bool _allowParallelEdges;
     private readonly bool _uniqueWeights;
     private readonly bool _allowNegativeWeights;
+
+    private readonly LongRandom _prng;
 }
 
 /// <summary>Graphical frontend for GraphGenerator.</summary>
@@ -319,7 +379,8 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private static void SubscribeNormalizer(WF.TextBox textBox,
                                             Func<string, string> normalizer)
         => textBox.LostFocus += delegate {
-            textBox.Text = normalizer(textBox.Text);
+            var normalized = normalizer(textBox.Text);
+            if (textBox.Text != normalized) textBox.Text = normalized;
         };
 
     private static string NormalizeAsValueOrClosedInterval(string text)
@@ -470,7 +531,8 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private async void generate_Click(object? sender, EventArgs e)
     {
-        if (!(ReadState() is GraphGenerator generator)) {
+        ReadState(); // Use latest input even if it was given very strangely.
+        if (_generator == null || _generator.Error != null) {
             Warn("\"Generate\" button enabled with unusable parameters");
             return;
         }
@@ -480,10 +542,8 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         _generate.Enabled = false;
         _cancel.Enabled = true;
         try {
-            var prng = GetPrng();
-
-            // FIXME: This needs to actually get the results!
-            await Task.Run(() => generator.Generate(prng));
+            // FIXME: Replace with code to give results to subscriber(s).
+            await Task.Run(() => _generator.Generate().Dump(noTotals: true));
         } finally {
             _cancel.Text = "Cancel";
             _cancel.Enabled = false;
@@ -512,7 +572,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         if (_formShownBefore) ReadState();
     }
 
-    private GraphGenerator? ReadState()
+    private void ReadState()
     {
         const string integerOrRange = "must be an integer (or range)";
         const string rangeOrInteger = "must be a range (or integer)";
@@ -522,24 +582,25 @@ internal sealed class GraphGeneratorDialog : WF.Form {
                 && ReadClosedInterval(_size, _sizeLabel, integerOrRange)
                         is ClosedInterval sizes
                 && ReadClosedInterval(_weights, _weightsLabel, rangeOrInteger)
-                        is ClosedInterval weights))
-            return null;
+                        is ClosedInterval weights)) {
+            _generator = null;
+            return;
+        }
 
-        var generator = new GraphGenerator(
+        _generator = new GraphGenerator(
                 orders: orders,
                 sizes: sizes,
                 weights: weights,
                 allowLoops: _allowLoops.Checked,
                 allowParallelEdges: _allowParallelEdges.Checked,
                 uniqueWeights: _uniqueEdgeWeights.Checked,
-                allowNegativeWeights: false);
+                allowNegativeWeights: false,
+                prng: _highQualityRandomness.Checked ? _goodPrng : _fastPrng);
 
-        if (generator.Error == null)
+        if (_generator.Error == null)
             StatusOk();
         else
-            StatusError(generator.Error);
-
-        return generator;
+            StatusError(_generator.Error);
     }
 
     private ClosedInterval? ReadClosedInterval(WF.TextBox textBox,
@@ -632,14 +693,6 @@ internal sealed class GraphGeneratorDialog : WF.Form {
             yield return _uniqueEdgeWeights;
             yield return _highQualityRandomness;
         }
-    }
-
-    private LongRandom GetPrng()
-    {
-        if (_highQualityRandomness.Checked)
-            return _goodPrng ??= new GoodLongRandom();
-        else
-            return _fastPrng ??= new FastLongRandom();
     }
 
     private void Warn(string message)
@@ -751,8 +804,10 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private bool _wantStatusCaret = false;
     private bool _haveStatusCaret = true;
 
-    private FastLongRandom? _fastPrng = null;
-    private GoodLongRandom? _goodPrng = null;
+    private readonly LongRandom _fastPrng = new FastLongRandom();
+    private readonly LongRandom _goodPrng = new GoodLongRandom();
+
+    private GraphGenerator? _generator = null;
 }
 
 /// <summary>
@@ -763,9 +818,20 @@ private static void Main()
 {
     var dialog = new GraphGeneratorDialog();
 
-    new LC.Button("Open Graph Generator...", delegate {
-        dialog.DisplayDialog();
-    }).Dump();
+    var panel = new LC.WrapPanel();
 
+    var openGraphGenerator =
+        new LC.Button("Open Graph Generator...",
+                      delegate { dialog.DisplayDialog(); });
+
+    var clearResults = new LC.Button("Clear Results", delegate {
+        Util.ClearResults();
+        panel.Dump();
+    });
+
+    panel.Children.Add(openGraphGenerator);
+    panel.Children.Add(clearResults);
+
+    panel.Dump();
     dialog.DisplayDialog();
 }
