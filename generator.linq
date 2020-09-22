@@ -82,6 +82,7 @@ internal abstract class LongRandom {
     /// values in this (inclusive) range is strictly less than
     /// <c>int.MaxValue</c>.
     /// </remarks>
+    // FIXME: Should this exist? Is it *really* being used safely?
     internal virtual int NextInt32(int min, int max)
         => min + (int)Next((ulong)(max - min));
 
@@ -163,6 +164,9 @@ internal readonly struct LazyGraph {
     internal int Size { get; }
 
     internal IEnumerable<Edge> Edges { get; }
+
+    internal LazyGraph Materialize()
+        => new LazyGraph(Order, Size, Edges.ToList());
 
     private object ToDump() => new { Order, Size, Edges };
 }
@@ -543,7 +547,9 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         _cancel.Enabled = true;
         try {
             // FIXME: Replace with code to give results to subscriber(s).
-            await Task.Run(() => _generator.Generate().Dump(noTotals: true));
+            await Task.Run(() => _generator.Generate()
+                                           .Materialize()
+                                           .Dump(noTotals: true));
         } finally {
             _cancel.Text = "Cancel";
             _cancel.Enabled = false;
