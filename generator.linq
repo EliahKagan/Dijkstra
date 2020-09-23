@@ -193,9 +193,6 @@ internal sealed class GraphGenerator {
         _allowNegativeWeights = allowNegativeWeights;
         _prng = prng;
 
-        // Assign a dummy value, so the Check... methods can be called.
-        Error = $"Bug: {nameof(GraphGenerator)} not fully constructed";
-
         Error = CheckEachInterval()
              ?? CheckEachCardinality()
              ?? CheckSizeAgainstOrder()
