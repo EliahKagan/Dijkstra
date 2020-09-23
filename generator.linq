@@ -61,6 +61,13 @@ internal readonly struct ClosedInterval {
         new Regex(@"^([^-]+)-([^-]+)$", RegexOptions.Compiled);
 }
 
+/// <summary>
+/// Random number generator of <see cref="System.UInt64"/> values.
+/// </summary>
+/// <remarks>
+/// Supports sampling from arbitrary large closed intervals, including the
+/// while range of <c>ulong</c>.
+/// </remarks>
 internal abstract class LongRandom {
     static LongRandom()
         => Debug.Assert(1 << ShiftCount == BufferSize * BitsPerByte);
@@ -75,16 +82,6 @@ internal abstract class LongRandom {
             if (result <= max) return result;
         }
     }
-
-    /// <summary>Quickly picks an integer from a small range.</summary>
-    /// <remarks>
-    /// Assumes <c>min</c> is no greater than <c>max</c> and the number of
-    /// values in this (inclusive) range is strictly less than
-    /// <c>int.MaxValue</c>.
-    /// </remarks>
-    // FIXME: Should this exist? Is it *really* being used safely?
-    internal virtual int NextInt32(int min, int max)
-        => min + (int)Next((ulong)(max - min));
 
     private protected abstract void NextBytes(byte[] buffer);
 
@@ -102,6 +99,10 @@ internal abstract class LongRandom {
     private readonly byte[] _buffer = new byte[BufferSize];
 }
 
+/// <summary>
+/// <see cref="System.Random"/>-based random number generator of
+/// <see cref="System.UInt64"/> values.
+/// </summary>
 internal sealed class FastLongRandom : LongRandom {
     internal FastLongRandom()
         : this(RandomNumberGenerator.GetInt32(int.MaxValue)) { }
@@ -112,21 +113,38 @@ internal sealed class FastLongRandom : LongRandom {
         => max < int.MaxValue ? (ulong)_random.Next((int)max + 1)
                               : base.Next(max);
 
-    internal override int NextInt32(int min, int max)
-        => _random.Next(min, max + 1);
-
     private protected override void NextBytes(byte[] buffer)
         => _random.NextBytes(buffer);
 
     private readonly Random _random;
 }
 
+/// <summary>
+/// <see cref="System.Security.Cryptography.RandomNumberGenerator">-based
+/// random number generator of <see cref="System.UInt64"/> values.
+/// </summary>
 internal sealed class GoodLongRandom : LongRandom {
     private protected override void NextBytes(byte[] buffer)
         => _random.GetBytes(buffer);
 
     private readonly RandomNumberGenerator _random =
         RandomNumberGenerator.Create();
+}
+
+/// <summary>Extension methods for <see cref="LongRandom"/>.</summary>
+internal static class LongRandomExtensions {
+    internal static int NextInt32(this LongRandom prng, int min, int max)
+    {
+        if (max < min) {
+            throw new ArgumentOutOfRangeException(
+                    paramName: nameof(min),
+                    message: "can't sample from empty range");
+        }
+
+        var zeroBasedMax = (ulong)((long)max - (long)min);
+        var value = (long)min + (long)prng.Next(zeroBasedMax);
+        return (int)value;
+    }
 }
 
 internal sealed class DistinctSampler {
