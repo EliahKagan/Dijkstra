@@ -120,7 +120,7 @@ internal sealed class FastLongRandom : LongRandom {
 }
 
 /// <summary>
-/// <see cref="System.Security.Cryptography.RandomNumberGenerator">-based
+/// <see cref="System.Security.Cryptography.RandomNumberGenerator"/>-based
 /// random number generator of <see cref="System.UInt64"/> values.
 /// </summary>
 internal sealed class GoodLongRandom : LongRandom {
