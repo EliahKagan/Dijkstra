@@ -699,7 +699,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         if (_generator.Error != null)
             StatusError(_generator.Error);
         else if (_sinks == null)
-            StatusError("data sink busy/unavailable");
+            StatusError("Data sink busy/unavailable");
         else
             StatusOk();
     }
