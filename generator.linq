@@ -271,6 +271,7 @@ internal sealed class GraphGenerator {
                 return (src: (int)src, dest: (int)dest);
             };
         }
+
         return encodedEndpoints => {
             var src = encodedEndpoints / (longOrder - 1);
             var dest = encodedEndpoints % (longOrder - 1);
