@@ -3,6 +3,7 @@
 </Query>
 
 #load "./helpers.linq"
+#load "./generator.linq"
 
 /// <summary>Configuration options not exposed by the controller.</summary>
 internal static class Options {
@@ -626,11 +627,15 @@ internal sealed class Controller {
 
     internal void Show()
     {
+        _generate.Dump();
+
         _order.Dump("Order");
         _edges.Dump("Edges");
         _source.Dump("Source");
+
         _pqConfig.Dump("Priority queues");
         _outputConfig.Dump("Output");
+
         _buttons.Dump();
     }
 
@@ -661,6 +666,12 @@ internal sealed class Controller {
                        string initialSource,
                        IList<PriorityQueueItem> priorityQueues)
     {
+        _generatorDialog.Generating += generatorDialog_Generating;
+        _generatorDialog.Generated += generatorDialog_Generated;
+
+        _generate = new Button("Generate a graph...",
+                               delegate { _generatorDialog.DisplayDialog(); });
+
         _order = new TextBox(initialOrder, width: "60px");
         _edges = new TextArea(initialEdges, columns: 50) { Rows = 20 };
         _source = new TextBox(initialSource, width: "60px");
@@ -701,6 +712,43 @@ internal sealed class Controller {
             var pqCheckBox = new CheckBox(label, pq.Selected, Configure);
             _pqConfig.Children.Add(pqCheckBox);
         }
+    }
+
+    private void generatorDialog_Generating(object sender,
+                                            GraphGeneratingEventArgs e)
+    {
+        //_generatorDialog.Generated -= generatorDialog_Generated;
+
+        _order.Text = e.Order.ToString();
+
+        _edges.Text = (e.Size == 1 ? $"# Generating 1 edge..."
+                                   : $"# Generating {e.Size} edges...");
+
+        // TODO: What should source be set to, if anything?
+
+        MaybeDisableAllControls();
+    }
+
+    private void generatorDialog_Generated(object sender,
+                                           GraphGeneratedEventArgs e)
+    {
+        _order.Text = e.Order.ToString();
+
+        Debug.Assert(e.Edges.Count == e.Size);
+
+        // TODO: Extract this shared logic to its own method.
+        _edges.Text = (e.Size == 1 ? $"# Populating 1 edge..."
+                                   : $"# Populating {e.Size} edges...");
+
+        //_generatorDialog.Generated += generatorDialog_Generated;
+
+        // FIXME: DRY (Something like this is already elsewhere, right?)
+        var lines = from edge in e.Edges
+                    select $"{edge.Src} {edge.Dest} {edge.Weight}";
+
+        _edges.Text = string.Join(Environment.NewLine, lines);
+
+        MaybeEnableAllControls();
     }
 
     private void run_Click(Button sender)
@@ -815,6 +863,11 @@ internal sealed class Controller {
         => _pqConfig.Children
             .Concat(_outputConfig.Children)
             .Cast<CheckBox>();
+
+    private readonly GraphGeneratorDialog _generatorDialog =
+        new GraphGeneratorDialog();
+
+    private readonly Button _generate;
 
     private readonly TextBox _order;
 

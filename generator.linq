@@ -172,9 +172,13 @@ internal sealed class DistinctSampler {
 }
 
 /// <summary></summary>
-internal readonly struct LazyGraph {
-    internal LazyGraph(int order, int size, IEnumerable<Edge> edges)
+internal readonly struct EdgeList {
+    internal EdgeList(int order, int size, IEnumerable<Edge> edges)
         => (Order, Size, Edges) = (order, size, edges);
+
+    internal void Deconstruct(out int order, out int size,
+                              out IEnumerable<Edge> edges)
+        => (order, size, edges) = (Order, Size, Edges);
 
     internal int Order { get; }
 
@@ -182,9 +186,6 @@ internal readonly struct LazyGraph {
     internal int Size { get; }
 
     internal IEnumerable<Edge> Edges { get; }
-
-    internal LazyGraph Materialize()
-        => new LazyGraph(Order, Size, Edges.ToList());
 
     private object ToDump() => new { Order, Size, Edges };
 }
@@ -220,13 +221,13 @@ internal sealed class GraphGenerator {
     internal string? Error { get; }
 
     // TODO: Figure out if this should use IObservable instead.
-    internal LazyGraph Generate()
+    internal EdgeList Generate()
     {
         if (Error != null) throw new InvalidOperationException(Error);
 
         var order = _prng.NextInt32(_orders.Min, _orders.Max);
         var size = _prng.NextInt32(_sizes.Min, ComputeMaxSize(order));
-        return new LazyGraph(order, size, EmitEdges(order, size));
+        return new EdgeList(order, size, EmitEdges(order, size));
     }
 
     private IEnumerable<Edge> EmitEdges(int order, int size)
@@ -368,6 +369,37 @@ internal sealed class GraphGenerator {
     private readonly LongRandom _prng;
 }
 
+/// <summary></summary>
+internal sealed class GraphGeneratingEventArgs : EventArgs {
+    internal GraphGeneratingEventArgs(int order, int size)
+        => (Order, Size) = (order, size);
+
+    internal int Order { get; }
+
+    internal int Size { get; }
+}
+
+/// <summary></summary>
+internal sealed class GraphGeneratedEventArgs : EventArgs {
+    internal GraphGeneratedEventArgs(int order, int size,
+                                     IReadOnlyList<Edge> edges)
+        => (Order, Size, Edges) = (order, size, edges);
+
+    internal int Order { get; }
+
+    internal int Size { get; }
+
+    internal IReadOnlyList<Edge> Edges { get; }
+}
+
+/// <summary></summary>
+internal delegate void
+GraphGeneratingEventHandler(object sender, GraphGeneratingEventArgs e);
+
+/// <summary></summary>
+internal delegate void
+GraphGeneratedEventHandler(object sender, GraphGeneratedEventArgs e);
+
 /// <summary>Graphical frontend for GraphGenerator.</summary>
 internal sealed class GraphGeneratorDialog : WF.Form {
     internal GraphGeneratorDialog()
@@ -380,10 +412,41 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     }
 
     internal void DisplayDialog()
+        => RunOrBeginInvoke(delegate {
+            if (Visible) Hide();
+            Show();
+            WindowState = WF.FormWindowState.Normal;
+        });
+
+    internal event GraphGeneratingEventHandler? Generating = null;
+
+    internal event GraphGeneratedEventHandler Generated
     {
-        if (Visible) Hide();
-        Show();
-        WindowState = WF.FormWindowState.Normal;
+        add {
+            if (value == null)
+                throw new ArgumentNullException(paramName: nameof(value));
+
+            bool wasNull;
+
+            lock (_sinksLocker) {
+                wasNull = _sinks == null;
+                _sinks += value;
+            }
+
+            if (wasNull) RunOrBeginInvoke(InvalidateGenerator);
+        }
+
+        remove {
+            bool becameNull;
+
+            lock (_sinksLocker) {
+                var wasNull = _sinks == null;
+                _sinks -= value;
+                becameNull = !wasNull && _sinks == null;
+            }
+
+            if (becameNull) RunOrBeginInvoke(InvalidateGenerator);
+        }
     }
 
     private const double RegularOpacity = 0.9;
@@ -552,8 +615,16 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private async void generate_Click(object? sender, EventArgs e)
     {
         ReadState(); // Use latest input even if it was given very strangely.
-        if (_generator == null || _generator.Error != null) {
-            Warn("\"Generate\" button enabled with unusable parameters");
+        var generator = _generator;
+
+        if (generator == null || generator.Error != null) {
+            Warn("Bug? \"Generate\" button enabled with unusable parameters.");
+            return;
+        }
+
+        var sinks = _sinks;
+        if (sinks == null) {
+            Warn("Bug? \"Generate\" button enabled with no data sink.");
             return;
         }
 
@@ -562,10 +633,16 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         _generate.Enabled = false;
         _cancel.Enabled = true;
         try {
-            // FIXME: Replace with code to give results to subscriber(s).
-            await Task.Run(() => _generator.Generate()
-                                           .Materialize()
-                                           .Dump(noTotals: true));
+            // TODO: Extract to its own method, maybe called OnGenerating.
+            await Task.Run(() => {
+                var (order, size, edges) = generator.Generate();
+
+                Generating?.Invoke(this,
+                                   new GraphGeneratingEventArgs(order, size));
+
+                sinks(this, new GraphGeneratedEventArgs(order, size,
+                                                        edges.ToList()));
+            });
         } finally {
             _cancel.Text = "Cancel";
             _cancel.Enabled = false;
@@ -619,10 +696,12 @@ internal sealed class GraphGeneratorDialog : WF.Form {
                 allowNegativeWeights: false,
                 prng: _highQualityRandomness.Checked ? _goodPrng : _fastPrng);
 
-        if (_generator.Error == null)
-            StatusOk();
-        else
+        if (_generator.Error != null)
             StatusError(_generator.Error);
+        else if (_sinks == null)
+            StatusError("data sink busy/unavailable");
+        else
+            StatusOk();
     }
 
     private ClosedInterval? ReadClosedInterval(WF.TextBox textBox,
@@ -719,6 +798,15 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private void Warn(string message)
         => message.Dump($"Warning ({nameof(GraphGeneratorDialog)})");
+
+    private void RunOrBeginInvoke(EventHandler method)
+    {
+        // TODO: Investigate if our use cases ever trigger the race condition.
+        if (InvokeRequired)
+            BeginInvoke(method);
+        else
+            method(this, EventArgs.Empty);
+    }
 
     private readonly WF.Label _orderLabel = new WF.Label {
         Text = "Order",
@@ -830,30 +918,67 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private readonly LongRandom _goodPrng = new GoodLongRandom();
 
     private GraphGenerator? _generator = null;
+    private GraphGeneratedEventHandler? _sinks = null;
+    private readonly object _sinksLocker = new object();
 }
 
 /// <summary>
 /// Test harness for <see cref="GraphGeneratorDialog"/> and
 /// <see cref="GraphGenerator"/>.
 /// </summary>
-private static void Main()
-{
-    var dialog = new GraphGeneratorDialog();
+internal sealed class TestHarness {
+    internal TestHarness()
+    {
+        _openGraphGenerator.Click += delegate { _dialog.DisplayDialog(); };
+        _clearResults.Click += clearResults_Click;
+        _toggleSubscription.Click += toggleSubscription_Click;
 
-    var panel = new LC.WrapPanel();
+        _panel = new LC.WrapPanel(_openGraphGenerator,
+                                  _clearResults,
+                                  _toggleSubscription);
+    }
 
-    var openGraphGenerator =
-        new LC.Button("Open Graph Generator...",
-                      delegate { dialog.DisplayDialog(); });
+    internal void Show(bool displayDialog)
+    {
+        _panel.Dump();
+        if (displayDialog) _dialog.DisplayDialog();
+    }
 
-    var clearResults = new LC.Button("Clear Results", delegate {
+    private void clearResults_Click(object? sender, EventArgs e)
+    {
         Util.ClearResults();
-        panel.Dump();
-    });
+        _panel.Dump();
+    }
 
-    panel.Children.Add(openGraphGenerator);
-    panel.Children.Add(clearResults);
+    private void toggleSubscription_Click(object? sender, EventArgs e)
+    {
+        if (_subscribed) {
+            _subscribed = false;
+            _dialog.Generated -= dialog_Generated;
+            _toggleSubscription.Text = "Subscribe";
+        } else {
+            _subscribed = true;
+            _dialog.Generated += dialog_Generated;
+            _toggleSubscription.Text = "Unsubscribe";
+        }
+    }
 
-    panel.Dump();
-    dialog.DisplayDialog();
+    private void dialog_Generated(object sender, GraphGeneratedEventArgs e)
+        => new EdgeList(e.Order, e.Size, e.Edges).Dump(noTotals: true);
+
+    private readonly GraphGeneratorDialog _dialog = new GraphGeneratorDialog();
+
+    private readonly LC.Button _openGraphGenerator =
+        new LC.Button("Open Graph Generator");
+
+    private readonly LC.Button _clearResults = new LC.Button("Clear Results");
+
+    private readonly LC.Button _toggleSubscription =
+        new LC.Button("Subscribe");
+
+    private readonly LC.WrapPanel _panel;
+
+    private bool _subscribed = false;
 }
+
+private static void Main() => new TestHarness().Show(displayDialog: true);
