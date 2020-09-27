@@ -743,6 +743,33 @@ internal sealed class Controller {
         }
     }
 
+    private void clear_Click(Button sender)
+    {
+        var order = _order.Text;
+        var edges = _edges.Text;
+        var source = _source.Text;
+
+        var config = CheckBoxes.Select(cb => (cb, cb.Checked)).ToList();
+
+        Util.ClearResults();
+
+        _order.Text = order;
+        _edges.Text = edges;
+        _source.Text = source;
+
+        foreach (var (cb, selected) in config) cb.Checked = selected;
+
+        Show();
+    }
+
+    private void Configure(CheckBox sender)
+    {
+        static bool AnyChecked(WrapPanel panel)
+            => panel.Children.Cast<CheckBox>().Any(cb => cb.Checked);
+
+        _run.Enabled = AnyChecked(_pqConfig) && AnyChecked(_outputConfig);
+    }
+
     private Graph BuildGraph()
     {
         var graph = new Graph(ReadOrder());
@@ -770,33 +797,6 @@ internal sealed class Controller {
                         : throw new InvalidOperationException(
                                 message: "wrong record length"))
                  .ToArray();
-
-    private void clear_Click(Button sender)
-    {
-        var order = _order.Text;
-        var edges = _edges.Text;
-        var source = _source.Text;
-
-        var config = CheckBoxes.Select(cb => (cb, cb.Checked)).ToList();
-
-        Util.ClearResults();
-
-        _order.Text = order;
-        _edges.Text = edges;
-        _source.Text = source;
-
-        foreach (var (cb, selected) in config) cb.Checked = selected;
-
-        Show();
-    }
-
-    private void Configure(CheckBox sender)
-    {
-        static bool AnyChecked(WrapPanel panel)
-            => panel.Children.Cast<CheckBox>().Any(cb => cb.Checked);
-
-        _run.Enabled = AnyChecked(_pqConfig) && AnyChecked(_outputConfig);
-    }
 
     void MaybeDisableAllControls()
     {
