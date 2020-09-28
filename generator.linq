@@ -612,6 +612,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         if (e.KeyCode == WF.Keys.F7) ApplyStatusCaretPreference();
     }
 
+    // TODO: Maybe break up this method somehow.
     private async void generate_Click(object? sender, EventArgs e)
     {
         ReadState(); // Use latest input even if it was given very strangely.
@@ -628,15 +629,15 @@ internal sealed class GraphGeneratorDialog : WF.Form {
             return;
         }
 
+        _working = true;
         TurnKnobsOff();
         _generate.Text = "Working...";
         _generate.Enabled = false;
+        var (order, size, edges) = generator.Generate();
+        StatusWaiting($"Generating {order} vertices, {size} edges");
         _cancel.Enabled = true;
         try {
-            // TODO: Extract to its own method, maybe called OnGenerating.
             await Task.Run(() => {
-                var (order, size, edges) = generator.Generate();
-
                 Generating?.Invoke(this,
                                    new GraphGeneratingEventArgs(order, size));
 
@@ -646,9 +647,10 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         } finally {
             _cancel.Text = "Cancel";
             _cancel.Enabled = false;
-            _generate.Enabled = true;
             _generate.Text = "Generate";
             TurnKnobsOn();
+            _working = false;
+            ReadState();
         }
     }
 
@@ -676,11 +678,12 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         const string integerOrRange = "must be an integer (or range)";
         const string rangeOrInteger = "must be a range (or integer)";
 
-        if (!(ReadClosedInterval(_order, _orderLabel, integerOrRange)
+        if (_working ||
+                !(ReadClosedInterval(_order, _orderLabel, integerOrRange)
                         is ClosedInterval orders
-                && ReadClosedInterval(_size, _sizeLabel, integerOrRange)
+                  && ReadClosedInterval(_size, _sizeLabel, integerOrRange)
                         is ClosedInterval sizes
-                && ReadClosedInterval(_weights, _weightsLabel, rangeOrInteger)
+                  && ReadClosedInterval(_weights, _weightsLabel, rangeOrInteger)
                         is ClosedInterval weights)) {
             _generator = null;
             return;
@@ -699,7 +702,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         if (_generator.Error != null)
             StatusError(_generator.Error);
         else if (_sinks == null)
-            StatusError("Data sink busy/unavailable");
+            StatusWaiting("Data sink busy/unavailable");
         else
             StatusOk();
     }
@@ -737,6 +740,14 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         _status.Text = "OK";
         SetStatusToolTip();
         _generate.Enabled = true;
+    }
+
+    private void StatusWaiting(string message)
+    {
+        _status.ForeColor = Color.Brown;
+        _status.Text = message;
+        SetStatusToolTip();
+        _generate.Enabled = false;
     }
 
     private void StatusError(string message)
@@ -802,7 +813,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private void RunOrBeginInvoke(EventHandler method)
     {
         // TODO: Investigate if our use cases ever trigger the race condition.
-        if (InvokeRequired)
+        if (IsHandleCreated)
             BeginInvoke(method);
         else
             method(this, EventArgs.Empty);
@@ -913,6 +924,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private bool _formShownBefore = false;
     private bool _wantStatusCaret = false;
     private bool _haveStatusCaret = true;
+    private bool _working = false;
 
     private readonly LongRandom _fastPrng = new FastLongRandom();
     private readonly LongRandom _goodPrng = new GoodLongRandom();
@@ -932,10 +944,12 @@ internal sealed class TestHarness {
         _openGraphGenerator.Click += delegate { _dialog.DisplayDialog(); };
         _clearResults.Click += clearResults_Click;
         _toggleSubscription.Click += toggleSubscription_Click;
+        _specifyBigTest.Click += specifyBigTest_Click;
 
         _panel = new LC.WrapPanel(_openGraphGenerator,
                                   _clearResults,
-                                  _toggleSubscription);
+                                  _toggleSubscription,
+                                  _specifyBigTest);
     }
 
     internal void Show(bool displayDialog)
@@ -963,6 +977,20 @@ internal sealed class TestHarness {
         }
     }
 
+    private void specifyBigTest_Click(object? sender, EventArgs e)
+        => _dialog.BeginInvoke(new WF.MethodInvoker(delegate {
+            dynamic dialog = _dialog.Uncapsulate();
+
+            dialog._order.Text = "1000";
+            dialog._size.Text = "1000000";
+            dialog._weights.Text = "1-1000000";
+
+            dialog._allowLoops.Checked = true;
+            dialog._allowParallelEdges.Checked = false;
+            dialog._uniqueEdgeWeights.Checked = true;
+            dialog._highQualityRandomness.Checked = true;
+        }));
+
     private void dialog_Generated(object sender, GraphGeneratedEventArgs e)
         => new EdgeList(e.Order, e.Size, e.Edges).Dump(noTotals: true);
 
@@ -975,6 +1003,9 @@ internal sealed class TestHarness {
 
     private readonly LC.Button _toggleSubscription =
         new LC.Button("Subscribe");
+
+    private readonly LC.Button _specifyBigTest =
+        new LC.Button("Specify Big Test");
 
     private readonly LC.WrapPanel _panel;
 
