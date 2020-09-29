@@ -621,7 +621,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         }
 
         _working = true;
-        TurnKnobsOff();
+        KnobsEnabled = false;
         _generate.Text = "Working...";
         _generate.Enabled = false;
         var (order, size, edges) = generator.Generate();
@@ -639,7 +639,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
             _cancel.Text = "Cancel";
             _cancel.Enabled = false;
             _generate.Text = "Generate";
-            TurnKnobsOn();
+            KnobsEnabled = true;
             _working = false;
             ReadState();
         }
@@ -666,15 +666,15 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private void ReadState()
     {
-        const string integerOrRange = "must be an integer (or range)";
-        const string rangeOrInteger = "must be a range (or integer)";
+        const string intOrRange = "must be an integer (or range)";
+        const string rangeOrInt = "must be a range (or integer)";
 
         if (_working ||
-                !(ReadClosedInterval(_order, _orderLabel, integerOrRange)
+                !(ReadClosedInterval(_order, _orderLabel, intOrRange)
                         is ClosedInterval orders
-                  && ReadClosedInterval(_size, _sizeLabel, integerOrRange)
+                  && ReadClosedInterval(_size, _sizeLabel, intOrRange)
                         is ClosedInterval sizes
-                  && ReadClosedInterval(_weights, _weightsLabel, rangeOrInteger)
+                  && ReadClosedInterval(_weights, _weightsLabel, rangeOrInt)
                         is ClosedInterval weights)) {
             _generator = null;
             return;
@@ -781,16 +781,6 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         }
     }
 
-    void TurnKnobsOff()
-    {
-        foreach (var control in Knobs) control.Enabled = false;
-    }
-
-    void TurnKnobsOn()
-    {
-        foreach (var control in Knobs) control.Enabled = true;
-    }
-
     private IEnumerable<WF.Control> Knobs
     {
         get {
@@ -802,6 +792,13 @@ internal sealed class GraphGeneratorDialog : WF.Form {
             yield return _allowParallelEdges;
             yield return _uniqueEdgeWeights;
             yield return _highQualityRandomness;
+        }
+    }
+
+    private bool KnobsEnabled
+    {
+        set {
+            foreach (var control in Knobs) control.Enabled = value;
         }
     }
 
