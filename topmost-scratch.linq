@@ -38,13 +38,13 @@ internal sealed class TopToggleExperiment : WF.Form {
     [DllImport("user32.dll")]
     private static extern IntPtr GetSystemMenu(IntPtr hWnd, bool bRevert);
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern bool AppendMenu(IntPtr hMenu,
                                           MenuFlags uFlags,
                                           MyMenuItemId uIDNewItem,
                                           string lpNewItem);
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern bool InsertMenu(IntPtr hMenu,
                                           uint uPosition,
                                           MenuFlags uFlags,
@@ -59,10 +59,11 @@ internal sealed class TopToggleExperiment : WF.Form {
     private IntPtr MenuHandle => GetSystemMenu(Handle, bRevert: false);
 
     private void TopToggleExperiment_HandleCreated(object? sender, EventArgs e)
-        => AppendMenu(MenuHandle,
-                      MenuFlags.MF_STRING,
+        => InsertMenu(MenuHandle,
+                      5,
+                      MenuFlags.MF_STRING | MenuFlags.MF_BYPOSITION,
                       MyMenuItemId.AlwaysOnTop,
-                      "&Always on top\tAlt+T "); // TODO: End with '\u2009'?
+                      "&Always on top\tAlt+T\u2009");
 
     private void TopToggleExperiment_KeyDown(object sender, WF.KeyEventArgs e)
     {
