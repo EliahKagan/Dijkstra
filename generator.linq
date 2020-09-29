@@ -473,9 +473,9 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         }
     }
 
-    private const double RegularOpacity = 0.9;
-
-    private const double ReducedOpacity = 0.6;
+    private const double ActiveOpacity = 0.9;
+    private const double InactiveOpacity = 0.8;
+    private const double MovingOpacity = 0.6;
 
     private const uint WM_SYSCOMMAND = 0x112;
 
@@ -571,7 +571,6 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Size = new Size(width: 300, height: 210);
         FormBorderStyle = WF.FormBorderStyle.Fixed3D;
         MaximizeBox = false;
-        Opacity = RegularOpacity;
         KeyPreview = true;
     }
 
@@ -580,9 +579,11 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         HandleCreated += GraphGeneratorDialog_HandleCreated;
         Shown += GraphGeneratorDialog_FormShown;
         FormClosing += GraphGeneratorDialog_FormClosing;
-        Move += delegate { Opacity = ReducedOpacity; };
-        Resize += delegate { Opacity = RegularOpacity; };
-        ResizeEnd += delegate { Opacity = RegularOpacity; };
+        Activated += delegate { Opacity = ActiveOpacity; };
+        Deactivate += delegate { Opacity = InactiveOpacity; };
+        Move += delegate { Opacity = MovingOpacity; };
+        Resize += delegate { Opacity = ActiveOpacity; };
+        ResizeEnd += delegate { Opacity = ActiveOpacity; };
         KeyDown += GraphGeneratorDialog_KeyDown;
     }
 
