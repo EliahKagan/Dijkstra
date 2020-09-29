@@ -449,9 +449,73 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         }
     }
 
+    protected override void WndProc(ref WF.Message m)
+    {
+        base.WndProc(ref m);
+
+        if ((uint)m.Msg != WM_SYSCOMMAND) return;
+
+        switch ((MyMenuItemId)m.WParam) {
+        case MyMenuItemId.AlwaysOnTop:
+            ToggleTopMost();
+            break;
+
+        case MyMenuItemId.EnableStatusCaret:
+            ToggleStatusCaretPreference();
+            break;
+
+        case MyMenuItemId.CopyStatusToClipboard:
+            CopyStatus();
+            break;
+
+        default:
+            break; // Others are possible, but shouldn't be handled here.
+        }
+    }
+
     private const double RegularOpacity = 0.9;
 
     private const double ReducedOpacity = 0.6;
+
+    private const uint WM_SYSCOMMAND = 0x112;
+
+    [Flags]
+    private enum MenuFlags : uint {
+        MF_STRING = 0x0,
+        MF_BYPOSITION = 0x400,
+        MF_SEPARATOR = 0x800,
+
+        MF_UNCHECKED = 0x0,
+        MF_CHECKED = 0x8,
+    }
+
+    private enum MyMenuItemId : uint {
+        UnusedId = 0, // For clarity, pass this when the ID will be ignored.
+        AlwaysOnTop = 1,
+        EnableStatusCaret = 2,
+        CopyStatusToClipboard = 3,
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetSystemMenu(IntPtr hWnd, bool bRevert);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool AppendMenu(IntPtr hMenu,
+                                          MenuFlags uFlags,
+                                          MyMenuItemId uIDNewItem,
+                                          string? lpNewItem);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool InsertMenu(IntPtr hMenu,
+                                          uint uPosition,
+                                          MenuFlags uFlags,
+                                          MyMenuItemId uIDNewItem,
+                                          string? lpNewItem);
+
+    [DllImport("user32.dll")]
+    private static extern uint CheckMenuItem(IntPtr hMenu,
+                                             MyMenuItemId uIDCheckItem,
+                                             MenuFlags uCheck);
 
     [DllImport("user32.dll")]
     private static extern bool HideCaret(IntPtr hWnd);
@@ -493,6 +557,14 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private static int? ParseValue(string text)
         => int.TryParse(text, out var value) ? value : default(int?);
 
+    private IntPtr MenuHandle => GetSystemMenu(Handle, bRevert: false);
+
+    private void SetMenuItemCheck(MyMenuItemId id, bool @checked)
+    {
+        var flags = (@checked ? MenuFlags.MF_CHECKED : MenuFlags.MF_UNCHECKED);
+        CheckMenuItem(MenuHandle, id, flags);
+    }
+
     private void SetFormProperties()
     {
         Text = "Graph Generator";
@@ -505,6 +577,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private void SubscribeFormEvents()
     {
+        HandleCreated += GraphGeneratorDialog_HandleCreated;
         Shown += GraphGeneratorDialog_FormShown;
         FormClosing += GraphGeneratorDialog_FormClosing;
         Move += delegate { Opacity = ReducedOpacity; };
@@ -578,6 +651,34 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Controls.Add(_close);
     }
 
+    private void GraphGeneratorDialog_HandleCreated(object? sender,
+                                                    EventArgs e)
+    {
+        // Oddly, the "T" in "Alt+T" is slightly cut off unless padded.
+        const char hairSpace = '\u200A';
+
+        InsertMenu(MenuHandle,
+                   5, // TODO: Compute or, if that's impractical, extract.
+                   MenuFlags.MF_STRING | MenuFlags.MF_BYPOSITION,
+                   MyMenuItemId.AlwaysOnTop,
+                   $"&Always on top\tAlt+T{hairSpace}");
+
+        AppendMenu(MenuHandle,
+                   MenuFlags.MF_SEPARATOR,
+                   MyMenuItemId.UnusedId,
+                   null);
+
+        AppendMenu(MenuHandle,
+                   MenuFlags.MF_STRING,
+                   MyMenuItemId.EnableStatusCaret,
+                   "Enable stat&us caret\tF7");
+
+        AppendMenu(MenuHandle,
+                   MenuFlags.MF_STRING,
+                   MyMenuItemId.CopyStatusToClipboard,
+                   "Copy status to clip&board\tCtrl+F7");
+    }
+
     private void GraphGeneratorDialog_FormShown(object? sender, EventArgs e)
     {
         if (!_formShownBefore) {
@@ -597,7 +698,22 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private void GraphGeneratorDialog_KeyDown(object sender, WF.KeyEventArgs e)
     {
-        if (e.KeyCode == WF.Keys.F7) ToggleStatusCaretPreference();
+        switch (e) {
+        case { KeyCode: WF.Keys.T, Modifiers: WF.Keys.Alt }:
+            ToggleTopMost();
+            break;
+
+        case { KeyCode: WF.Keys.F7, Modifiers: WF.Keys.Control }:
+            CopyStatus();
+            break;
+
+        case { KeyCode: WF.Keys.F7 }:
+            ToggleStatusCaretPreference();
+            break;
+
+        default:
+            break;
+        }
     }
 
     private void status_GotFocus(object? sender, EventArgs e)
@@ -757,9 +873,16 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         SetToolTip(_status, $"status: {_status.Text}\n({caretHelp})");
     }
 
+    private void ToggleTopMost()
+    {
+        TopMost = !TopMost;
+        SetMenuItemCheck(MyMenuItemId.AlwaysOnTop, TopMost);
+    }
+
     private void ToggleStatusCaretPreference()
     {
         _wantStatusCaret = !_wantStatusCaret;
+        SetMenuItemCheck(MyMenuItemId.EnableStatusCaret, _wantStatusCaret);
         SetStatusToolTip();
         if (_status.ContainsFocus) ApplyStatusCaretPreference();
     }
@@ -780,6 +903,8 @@ internal sealed class GraphGeneratorDialog : WF.Form {
                 Warn("Failure hiding generator status caret");
         }
     }
+
+    private void CopyStatus() => WF.Clipboard.SetText(_status.Text);
 
     private IEnumerable<WF.Control> Knobs
     {
