@@ -528,7 +528,6 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         SubscribeNormalizer(_weights, NormalizeAsClosedInterval);
 
         _status.GotFocus += status_GotFocus;
-        _status.KeyDown += status_KeyDown;
         _generate.Click += generate_Click;
         _cancel.Click += cancel_Click;
         _close.Click += delegate { Hide(); };
@@ -598,19 +597,11 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private void GraphGeneratorDialog_KeyDown(object sender, WF.KeyEventArgs e)
     {
-        if (e.KeyCode == WF.Keys.F7) {
-            _wantStatusCaret = !_wantStatusCaret;
-            SetStatusToolTip();
-        }
+        if (e.KeyCode == WF.Keys.F7) ToggleStatusCaretPreference();
     }
 
     private void status_GotFocus(object? sender, EventArgs e)
         => ApplyStatusCaretPreference();
-
-    private void status_KeyDown(object sender, WF.KeyEventArgs e)
-    {
-        if (e.KeyCode == WF.Keys.F7) ApplyStatusCaretPreference();
-    }
 
     // TODO: Maybe break up this method somehow.
     private async void generate_Click(object? sender, EventArgs e)
@@ -764,6 +755,13 @@ internal sealed class GraphGeneratorDialog : WF.Form {
                                           : "Press F7 to enable caret.");
 
         SetToolTip(_status, $"status: {_status.Text}\n({caretHelp})");
+    }
+
+    private void ToggleStatusCaretPreference()
+    {
+        _wantStatusCaret = !_wantStatusCaret;
+        SetStatusToolTip();
+        if (_status.ContainsFocus) ApplyStatusCaretPreference();
     }
 
     private void ApplyStatusCaretPreference()
