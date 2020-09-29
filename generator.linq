@@ -460,7 +460,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
             ToggleTopMost();
             break;
 
-        case MyMenuItemId.EnableStatusCaret:
+        case MyMenuItemId.ToggleStatusCaret:
             ToggleStatusCaretPreference();
             break;
 
@@ -481,18 +481,18 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     [Flags]
     private enum MenuFlags : uint {
-        MF_STRING = 0x0,
-        MF_BYPOSITION = 0x400,
-        MF_SEPARATOR = 0x800,
-
         MF_UNCHECKED = 0x0,
         MF_CHECKED = 0x8,
+        MF_BYCOMMAND = 0x0,
+        MF_BYPOSITION = 0x400,
+        MF_STRING = 0x0,
+        MF_SEPARATOR = 0x800,
     }
 
     private enum MyMenuItemId : uint {
         UnusedId = 0, // For clarity, pass this when the ID will be ignored.
         AlwaysOnTop = 1,
-        EnableStatusCaret = 2,
+        ToggleStatusCaret = 2,
         CopyStatusToClipboard = 3,
     }
 
@@ -507,6 +507,13 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern bool InsertMenu(IntPtr hMenu,
+                                          uint uPosition,
+                                          MenuFlags uFlags,
+                                          MyMenuItemId uIDNewItem,
+                                          string? lpNewItem);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool ModifyMenu(IntPtr hMenu,
                                           uint uPosition,
                                           MenuFlags uFlags,
                                           MyMenuItemId uIDNewItem,
@@ -558,12 +565,6 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         => int.TryParse(text, out var value) ? value : default(int?);
 
     private IntPtr MenuHandle => GetSystemMenu(Handle, bRevert: false);
-
-    private void SetMenuItemCheck(MyMenuItemId id, bool @checked)
-    {
-        var flags = (@checked ? MenuFlags.MF_CHECKED : MenuFlags.MF_UNCHECKED);
-        CheckMenuItem(MenuHandle, id, flags);
-    }
 
     private void SetFormProperties()
     {
@@ -671,8 +672,8 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
         AppendMenu(MenuHandle,
                    MenuFlags.MF_STRING,
-                   MyMenuItemId.EnableStatusCaret,
-                   "Enable stat&us caret\tF7");
+                   MyMenuItemId.ToggleStatusCaret,
+                   StatusCaretMenuText);
 
         AppendMenu(MenuHandle,
                    MenuFlags.MF_STRING,
@@ -867,24 +868,27 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     }
 
     private void SetStatusToolTip()
-    {
-        var caretHelp = (_wantStatusCaret ? "Press F7 to disable caret."
-                                          : "Press F7 to enable caret.");
-
-        SetToolTip(_status, $"status: {_status.Text}\n({caretHelp})");
-    }
+        => SetToolTip(_status, $"status: {_status.Text}\n({StatusCaretHelp})");
 
     private void ToggleTopMost()
     {
         TopMost = !TopMost;
-        SetMenuItemCheck(MyMenuItemId.AlwaysOnTop, TopMost);
+        var flags = (TopMost ? MenuFlags.MF_CHECKED : MenuFlags.MF_UNCHECKED);
+        CheckMenuItem(MenuHandle, MyMenuItemId.AlwaysOnTop, flags);
     }
 
     private void ToggleStatusCaretPreference()
     {
         _wantStatusCaret = !_wantStatusCaret;
-        SetMenuItemCheck(MyMenuItemId.EnableStatusCaret, _wantStatusCaret);
+
+        ModifyMenu(MenuHandle,
+                   (uint)MyMenuItemId.ToggleStatusCaret,
+                   MenuFlags.MF_BYCOMMAND,
+                   MyMenuItemId.ToggleStatusCaret,
+                   StatusCaretMenuText);
+
         SetStatusToolTip();
+
         if (_status.ContainsFocus) ApplyStatusCaretPreference();
     }
 
@@ -898,6 +902,14 @@ internal sealed class GraphGeneratorDialog : WF.Form {
                 Warn("Failure hiding generator status caret");
         }
     }
+
+    private string StatusCaretHelp
+        => _wantStatusCaret ? "Press F7 to disable caret."
+                            : "Press F7 to enable caret.";
+
+    private string StatusCaretMenuText
+        => _wantStatusCaret ? "Disable stat&us caret\tF7"
+                            : "Enable stat&us caret\tF7";
 
     private void CopyStatus() => WF.Clipboard.SetText(_status.Text);
 
