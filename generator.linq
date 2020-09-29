@@ -889,17 +889,11 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private void ApplyStatusCaretPreference()
     {
-        if (_haveStatusCaret == _wantStatusCaret) return;
-
         if (_wantStatusCaret) {
-            if (ShowCaret(_status.Handle))
-                _haveStatusCaret = true;
-            else
+            if (!ShowCaret(_status.Handle))
                 Warn("Failure showing generator status caret");
         } else {
-            if (HideCaret(_status.Handle))
-                _haveStatusCaret = false;
-            else
+            if (!HideCaret(_status.Handle))
                 Warn("Failure hiding generator status caret");
         }
     }
@@ -1043,7 +1037,6 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private bool _formShownBefore = false;
     private bool _wantStatusCaret = false;
-    private bool _haveStatusCaret = true;
     private bool _working = false;
 
     private readonly LongRandom _fastPrng = new FastLongRandom();
