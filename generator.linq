@@ -456,11 +456,15 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         if ((uint)m.Msg != WM_SYSCOMMAND) return;
 
         switch ((MyMenuItemId)m.WParam) {
-        case MyMenuItemId.AlwaysOnTop:
+        case MyMenuItemId.KeepOnTop:
             ToggleTopMost();
             break;
 
-        case MyMenuItemId.ToggleStatusCaret:
+        case MyMenuItemId.Translucent:
+            ToggleTranslucence();
+            break;
+
+        case MyMenuItemId.StatusCaret:
             ToggleStatusCaretPreference();
             break;
 
@@ -473,6 +477,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         }
     }
 
+    private const double FullOpacity = 1.0;
     private const double ActiveOpacity = 0.9;
     private const double InactiveOpacity = 0.8;
     private const double MovingOpacity = 0.6;
@@ -490,10 +495,11 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     }
 
     private enum MyMenuItemId : uint {
-        UnusedId = 0, // For clarity, pass this when the ID will be ignored.
-        AlwaysOnTop = 1,
-        ToggleStatusCaret = 2,
-        CopyStatusToClipboard = 3,
+        UnusedId, // For clarity, pass this when the ID will be ignored.
+        KeepOnTop,
+        Translucent,
+        StatusCaret,
+        CopyStatusToClipboard,
     }
 
     [DllImport("user32.dll")]
@@ -501,20 +507,6 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern bool AppendMenu(IntPtr hMenu,
-                                          MenuFlags uFlags,
-                                          MyMenuItemId uIDNewItem,
-                                          string? lpNewItem);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern bool InsertMenu(IntPtr hMenu,
-                                          uint uPosition,
-                                          MenuFlags uFlags,
-                                          MyMenuItemId uIDNewItem,
-                                          string? lpNewItem);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern bool ModifyMenu(IntPtr hMenu,
-                                          uint uPosition,
                                           MenuFlags uFlags,
                                           MyMenuItemId uIDNewItem,
                                           string? lpNewItem);
@@ -564,7 +556,26 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private static int? ParseValue(string text)
         => int.TryParse(text, out var value) ? value : default(int?);
 
+    private static MenuFlags CheckedFlag(bool @checked)
+        => @checked ? MenuFlags.MF_CHECKED : MenuFlags.MF_UNCHECKED;
+
     private IntPtr MenuHandle => GetSystemMenu(Handle, bRevert: false);
+
+    private void AddMenuSeparator()
+        => AppendMenu(MenuHandle,
+                      MenuFlags.MF_SEPARATOR,
+                      MyMenuItemId.UnusedId,
+                      null);
+
+    private void AddMenuItem(MyMenuItemId uIDNewItem, string lpNewItem,
+                             bool @checked = false)
+        => AppendMenu(MenuHandle,
+                      MenuFlags.MF_STRING | CheckedFlag(@checked),
+                      uIDNewItem,
+                      lpNewItem);
+
+    private void SetMenuItemCheck(MyMenuItemId id, bool @checked)
+        => CheckMenuItem(MenuHandle, id, CheckedFlag(@checked));
 
     private void SetFormProperties()
     {
@@ -580,11 +591,11 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         HandleCreated += GraphGeneratorDialog_HandleCreated;
         Shown += GraphGeneratorDialog_FormShown;
         FormClosing += GraphGeneratorDialog_FormClosing;
-        Activated += delegate { Opacity = ActiveOpacity; };
-        Deactivate += delegate { Opacity = InactiveOpacity; };
-        Move += delegate { Opacity = MovingOpacity; };
-        Resize += delegate { Opacity = ActiveOpacity; };
-        ResizeEnd += delegate { Opacity = ActiveOpacity; };
+        Activated += GetOpacitySetter(ActiveOpacity);
+        Deactivate += GetOpacitySetter(InactiveOpacity);
+        Move += GetOpacitySetter(MovingOpacity);
+        Resize += GetOpacitySetter(ActiveOpacity);
+        ResizeEnd += GetOpacitySetter(ActiveOpacity);
         KeyDown += GraphGeneratorDialog_KeyDown;
     }
 
@@ -653,32 +664,28 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Controls.Add(_close);
     }
 
+    private EventHandler GetOpacitySetter(double opacity)
+        => delegate { if (_translucent) Opacity = opacity; };
+
     private void GraphGeneratorDialog_HandleCreated(object? sender,
                                                     EventArgs e)
     {
         // Oddly, the "T" in "Alt+T" is slightly cut off unless padded.
         const char hairSpace = '\u200A';
 
-        InsertMenu(MenuHandle,
-                   5, // TODO: Compute or, if that's impractical, extract.
-                   MenuFlags.MF_STRING | MenuFlags.MF_BYPOSITION,
-                   MyMenuItemId.AlwaysOnTop,
-                   $"&Always on top\tAlt+T{hairSpace}");
+        AddMenuSeparator();
 
-        AppendMenu(MenuHandle,
-                   MenuFlags.MF_SEPARATOR,
-                   MyMenuItemId.UnusedId,
-                   null);
+        AddMenuItem(MyMenuItemId.KeepOnTop,
+                    "&Keep on top\tAlt+K", @checked: false);
 
-        AppendMenu(MenuHandle,
-                   MenuFlags.MF_STRING,
-                   MyMenuItemId.ToggleStatusCaret,
-                   StatusCaretMenuText);
+        AddMenuItem(MyMenuItemId.Translucent,
+                    $"&Translucent\tAlt+T{hairSpace}", @checked: true);
 
-        AppendMenu(MenuHandle,
-                   MenuFlags.MF_STRING,
-                   MyMenuItemId.CopyStatusToClipboard,
-                   "Copy status to clip&board\tCtrl+F7");
+        AddMenuItem(MyMenuItemId.StatusCaret,
+                    "Stat&us caret\tF7", @checked: false);
+
+        AddMenuItem(MyMenuItemId.CopyStatusToClipboard,
+                    "Copy status to clip&board\tCtrl+F7");
     }
 
     private void GraphGeneratorDialog_FormShown(object? sender, EventArgs e)
@@ -701,8 +708,12 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private void GraphGeneratorDialog_KeyDown(object sender, WF.KeyEventArgs e)
     {
         switch (e) {
-        case { KeyCode: WF.Keys.T, Modifiers: WF.Keys.Alt }:
+        case { KeyCode: WF.Keys.K, Modifiers: WF.Keys.Alt }:
             ToggleTopMost();
+            break;
+
+        case { KeyCode: WF.Keys.T, Modifiers: WF.Keys.Alt }:
+            ToggleTranslucence();
             break;
 
         case { KeyCode: WF.Keys.F7, Modifiers: WF.Keys.Control }:
@@ -873,22 +884,28 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private void ToggleTopMost()
     {
         TopMost = !TopMost;
-        var flags = (TopMost ? MenuFlags.MF_CHECKED : MenuFlags.MF_UNCHECKED);
-        CheckMenuItem(MenuHandle, MyMenuItemId.AlwaysOnTop, flags);
+        SetMenuItemCheck(MyMenuItemId.KeepOnTop, TopMost);
+    }
+
+    private void ToggleTranslucence()
+    {
+        _translucent = !_translucent;
+
+        SetMenuItemCheck(MyMenuItemId.Translucent, _translucent);
+
+        if (_translucent) {
+            // Support even inactive translucence changes to avoid brittleness.
+            Opacity = (ActiveForm == this ? ActiveOpacity : InactiveOpacity);
+        } else {
+            Opacity = FullOpacity;
+        }
     }
 
     private void ToggleStatusCaretPreference()
     {
         _wantStatusCaret = !_wantStatusCaret;
-
-        ModifyMenu(MenuHandle,
-                   (uint)MyMenuItemId.ToggleStatusCaret,
-                   MenuFlags.MF_BYCOMMAND,
-                   MyMenuItemId.ToggleStatusCaret,
-                   StatusCaretMenuText);
-
+        SetMenuItemCheck(MyMenuItemId.StatusCaret, _wantStatusCaret);
         SetStatusToolTip();
-
         if (_status.ContainsFocus) ApplyStatusCaretPreference();
     }
 
@@ -906,10 +923,6 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private string StatusCaretHelp
         => _wantStatusCaret ? "Press F7 to disable caret."
                             : "Press F7 to enable caret.";
-
-    private string StatusCaretMenuText
-        => _wantStatusCaret ? "Disable stat&us caret\tF7"
-                            : "Enable stat&us caret\tF7";
 
     private void CopyStatus() => WF.Clipboard.SetText(_status.Text);
 
@@ -1049,6 +1062,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private readonly WF.ToolTip _toolTip = new WF.ToolTip();
 
     private bool _formShownBefore = false;
+    private bool _translucent = true;
     private bool _wantStatusCaret = false;
     private bool _working = false;
 
