@@ -670,16 +670,14 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private void GraphGeneratorDialog_HandleCreated(object? sender,
                                                     EventArgs e)
     {
-        // Oddly, the "T" in "Alt+T" is slightly cut off unless padded.
-        const char hairSpace = '\u200A';
-
         AddMenuSeparator();
 
         AddMenuItem(MyMenuItemId.KeepOnTop,
                     "&Keep on top\tAlt+K", @checked: false);
 
+        // "T" in "Alt+T" was cut off on the right. "\r" fixes this, somehow.
         AddMenuItem(MyMenuItemId.Translucent,
-                    $"&Translucent\tAlt+T{hairSpace}", @checked: true);
+                    $"&Translucent\tAlt+T\r", @checked: true);
 
         AddMenuItem(MyMenuItemId.StatusCaret,
                     "Stat&us caret\tF7", @checked: false);
