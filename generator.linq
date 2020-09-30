@@ -1067,6 +1067,8 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 internal sealed class TestHarness {
     internal TestHarness()
     {
+        _dialog.Text += " test";
+
         _openGraphGenerator.Click += delegate { _dialog.DisplayDialog(); };
         _clearResults.Click += clearResults_Click;
         _toggleSubscription.Click += toggleSubscription_Click;
