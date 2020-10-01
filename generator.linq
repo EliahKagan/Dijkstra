@@ -136,8 +136,6 @@ internal static class LongRandomExtensions {
     internal static int NextInt32(this LongRandom prng, int min, int max)
     {
         if (max < min) {
-            new { min, max }.Dump("fail");
-
             throw new ArgumentOutOfRangeException(
                     paramName: nameof(min),
                     message: "can't sample from empty range");
@@ -227,7 +225,7 @@ internal sealed class GraphGenerator {
     {
         if (Error != null) throw new InvalidOperationException(Error);
 
-        var order = _prng.NextInt32(_orders.Min, _orders.Max).Dump("order");
+        var order = _prng.NextInt32(_orders.Min, _orders.Max);
         var size = _prng.NextInt32(_sizes.Min, ComputeMaxSize(order));
         return new EdgeList(order, size, EmitEdges(order, size));
     }
