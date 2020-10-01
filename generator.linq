@@ -136,6 +136,8 @@ internal static class LongRandomExtensions {
     internal static int NextInt32(this LongRandom prng, int min, int max)
     {
         if (max < min) {
+            new { min, max }.Dump("fail");
+
             throw new ArgumentOutOfRangeException(
                     paramName: nameof(min),
                     message: "can't sample from empty range");
@@ -225,7 +227,7 @@ internal sealed class GraphGenerator {
     {
         if (Error != null) throw new InvalidOperationException(Error);
 
-        var order = _prng.NextInt32(_orders.Min, _orders.Max);
+        var order = _prng.NextInt32(_orders.Min, _orders.Max).Dump("order");
         var size = _prng.NextInt32(_sizes.Min, ComputeMaxSize(order));
         return new EdgeList(order, size, EmitEdges(order, size));
     }
@@ -317,15 +319,16 @@ internal sealed class GraphGenerator {
 
     private string? CheckSizeAgainstOrder()
     {
-        var maxSize = ComputeMaxSize(_orders.Max);
+        var order = _orders.Min;
+        var size = ComputeMaxSize(order);
 
-        if (_sizes.Min <= maxSize) return null;
+        if (_sizes.Min <= size) return null;
 
-        return (_orders.Max, maxSize) switch {
+        return (order, size) switch {
             (1, 1) => $"1 vertex allows only 1 edge",
-            (1, _) => $"1 vertex allows only {maxSize} edges",
-            (_, 1) => $"{_orders.Max} vertices allow only 1 edge", // Unused.
-            (_, _) => $"{_orders.Max} vertices allow only {maxSize} edges"
+            (1, _) => $"1 vertex allows only {size} edges",
+            (_, 1) => $"{order} vertices allow only 1 edge", // Unused.
+            (_, _) => $"{order} vertices allow only {size} edges"
         };
     }
 
