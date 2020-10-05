@@ -1023,7 +1023,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Text = "allow loops",
         Location = new Point(x: 135, y: 12),
         Size = new Size(width: 140, height: 20),
-        //AutoSize = true,
+        AutoSize = true,
         Checked = true,
     };
 
@@ -1031,7 +1031,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Text = "allow parallel edges",
         Location = new Point(x: 135, y: 33),
         Size = new Size(width: 140, height: 20),
-        //AutoSize = true,
+        AutoSize = true,
         Checked = true,
     };
 
@@ -1039,7 +1039,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Text = "unique edge weights",
         Location = new Point(x: 135, y: 54),
         Size = new Size(width: 140, height: 20),
-        //AutoSize = true,
+        AutoSize = true,
         Checked = false,
     };
 
@@ -1047,7 +1047,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Text = "high quality PRNG",
         Location = new Point(x: 135, y: 76),
         Size = new Size(width: 140, height: 20),
-        //AutoSize = true,
+        AutoSize = true,
         Checked = false,
     };
 
