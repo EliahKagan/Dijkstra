@@ -1054,7 +1054,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private readonly WF.TextBox _status = new WF.TextBox {
         Text = "Loading...",
         Location = new Point(x: 10, y: 102),
-        Size = new Size(width: 250, height: 15),
+        Size = new Size(width: 265, height: 20),
         //AutoSize = true,
         ReadOnly = true,
         BorderStyle = WF.BorderStyle.None,
