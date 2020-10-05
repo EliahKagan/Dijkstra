@@ -976,10 +976,10 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private readonly WF.Label _orderLabel = new WF.Label {
         Text = "Order",
-        Location = new Point(x: 8, y: 17),
-        Size = new Size(width: 45, height: 15),
+        Location = new Point(x: 5, y: 17),
+        Size = new Size(width: 53, height: 15),
         //AutoSize = true,
-        TextAlign = ContentAlignment.MiddleCenter,
+        TextAlign = ContentAlignment.MiddleRight,
     };
 
     private readonly WF.TextBox _order = new WF.TextBox {
@@ -991,10 +991,10 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private readonly WF.Label _sizeLabel = new WF.Label {
         Text = "Size",
-        Location = new Point(x: 8, y: 46),
-        Size = new Size(width: 50, height: 15),
+        Location = new Point(x: 5, y: 46),
+        Size = new Size(width: 53, height: 15),
         //AutoSize = true,
-        TextAlign = ContentAlignment.MiddleCenter,
+        TextAlign = ContentAlignment.MiddleRight,
     };
 
     private readonly WF.TextBox _size = new WF.TextBox {
@@ -1006,10 +1006,10 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private readonly WF.Label _weightsLabel = new WF.Label {
         Text = "Weights",
-        Location = new Point(x: 8, y: 75),
-        Size = new Size(width: 50, height: 15),
+        Location = new Point(x: 5, y: 75),
+        Size = new Size(width: 53, height: 15),
         //AutoSize = true,
-        TextAlign = ContentAlignment.MiddleCenter,
+        TextAlign = ContentAlignment.MiddleRight,
     };
 
     private readonly WF.TextBox _weights = new WF.TextBox {
