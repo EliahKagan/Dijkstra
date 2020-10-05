@@ -619,7 +619,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         _allowLoops.CheckedChanged += InvalidateGenerator;
         _allowParallelEdges.CheckedChanged += InvalidateGenerator;
         _uniqueEdgeWeights.CheckedChanged += InvalidateGenerator;
-        _highQualityRandomness.CheckedChanged += InvalidateGenerator;
+        _highQualityPrng.CheckedChanged += InvalidateGenerator;
 
         SubscribeNormalizer(_order, NormalizeAsValueOrClosedInterval);
         SubscribeNormalizer(_size, NormalizeAsValueOrClosedInterval);
@@ -648,7 +648,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
                     + "vertices are always permitted.");
         SetToolTip(_uniqueEdgeWeights,
                    "Must no two edges have the same weight?");
-        SetToolTip(_highQualityRandomness,
+        SetToolTip(_highQualityPrng,
                    "slower but higher quality pseudorandom number generation");
 
         SetToolTip(_status, "status");
@@ -669,7 +669,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Controls.Add(_allowLoops);
         Controls.Add(_allowParallelEdges);
         Controls.Add(_uniqueEdgeWeights);
-        Controls.Add(_highQualityRandomness);
+        Controls.Add(_highQualityPrng);
         Controls.Add(_status);
         Controls.Add(_generate);
         Controls.Add(_cancel);
@@ -832,7 +832,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
                 allowParallelEdges: _allowParallelEdges.Checked,
                 uniqueWeights: _uniqueEdgeWeights.Checked,
                 allowNegativeWeights: false,
-                prng: _highQualityRandomness.Checked ? _goodPrng : _fastPrng);
+                prng: _highQualityPrng.Checked ? _goodPrng : _fastPrng);
 
         if (_generator.Error != null)
             StatusError(_generator.Error);
@@ -951,7 +951,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
             yield return _allowLoops;
             yield return _allowParallelEdges;
             yield return _uniqueEdgeWeights;
-            yield return _highQualityRandomness;
+            yield return _highQualityPrng;
         }
     }
 
@@ -1043,7 +1043,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Checked = false,
     };
 
-    private readonly WF.CheckBox _highQualityRandomness = new WF.CheckBox {
+    private readonly WF.CheckBox _highQualityPrng = new WF.CheckBox {
         Text = "high quality PRNG",
         Location = new Point(x: 135, y: 76),
         Size = new Size(width: 140, height: 20),
@@ -1159,7 +1159,7 @@ internal sealed class TestHarness {
             dialog._allowLoops.Checked = true;
             dialog._allowParallelEdges.Checked = false;
             dialog._uniqueEdgeWeights.Checked = true;
-            dialog._highQualityRandomness.Checked = true;
+            dialog._highQualityPrng.Checked = true;
         }));
 
     private void dialog_Generated(object sender, GraphGeneratedEventArgs e)
