@@ -405,11 +405,15 @@ GraphGeneratedEventHandler(object sender, GraphGeneratedEventArgs e);
 internal sealed class GraphGeneratorDialog : WF.Form {
     internal GraphGeneratorDialog()
     {
+        SuspendLayout();
+
         SetFormProperties();
         SubscribeFormEvents();
         SubscribeChildControlEvents();
         SetAllToolTips();
         AddChildControls();
+
+        ResumeLayout();
     }
 
     internal void DisplayDialog()
@@ -580,6 +584,12 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private void SetFormProperties()
     {
+        //AutoScaleDimensions = new SizeF(6f, 13f);
+        AutoScaleDimensions = new SizeF(7f, 15f);
+        //AutoScaleBaseSize = new Size(7, 15);
+        AutoScaleMode = WF.AutoScaleMode.Font;
+        AutoSize = true;
+
         Text = "Graph Generator";
         Size = new Size(width: 300, height: 210);
         FormBorderStyle = WF.FormBorderStyle.Fixed3D;
@@ -590,6 +600,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private void SubscribeFormEvents()
     {
         HandleCreated += GraphGeneratorDialog_HandleCreated;
+        //Load += delegate { PerformAutoScale(); };
         Shown += GraphGeneratorDialog_FormShown;
         FormClosing += GraphGeneratorDialog_FormClosing;
         Activated += GetOpacitySetter(ActiveOpacity);
@@ -693,6 +704,11 @@ internal sealed class GraphGeneratorDialog : WF.Form {
             _formShownBefore = true;
             ReadState();
         }
+
+        // FIXME: remove after debugging
+        Controls.Cast<WF.Control>().Select(control => new {
+            control.Text,
+            control.AutoSize }).Dump();
     }
 
     private void GraphGeneratorDialog_FormClosing(object sender,
@@ -962,6 +978,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Text = "Order",
         Location = new Point(x: 8, y: 17),
         Size = new Size(width: 45, height: 15),
+        //AutoSize = true,
         TextAlign = ContentAlignment.MiddleCenter,
     };
 
@@ -969,12 +986,14 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Text = "10",
         Location = new Point(x: 60, y: 13),
         Size = new Size(width: 60, height: 15),
+        //AutoSize = true,
     };
 
     private readonly WF.Label _sizeLabel = new WF.Label {
         Text = "Size",
         Location = new Point(x: 8, y: 46),
         Size = new Size(width: 50, height: 15),
+        //AutoSize = true,
         TextAlign = ContentAlignment.MiddleCenter,
     };
 
@@ -982,12 +1001,14 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Text = "25",
         Location = new Point(x: 60, y: 42),
         Size = new Size(width: 60, height: 15),
+        //AutoSize = true,
     };
 
     private readonly WF.Label _weightsLabel = new WF.Label {
         Text = "Weights",
         Location = new Point(x: 8, y: 75),
         Size = new Size(width: 50, height: 15),
+        //AutoSize = true,
         TextAlign = ContentAlignment.MiddleCenter,
     };
 
@@ -995,12 +1016,14 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Text = "1-100",
         Location = new Point(x: 60, y: 71),
         Size = new Size(width: 60, height: 15),
+        //AutoSize = true,
     };
 
     private readonly WF.CheckBox _allowLoops = new WF.CheckBox {
         Text = "allow loops",
         Location = new Point(x: 135, y: 12),
         Size = new Size(width: 140, height: 20),
+        //AutoSize = true,
         Checked = true,
     };
 
@@ -1008,6 +1031,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Text = "allow parallel edges",
         Location = new Point(x: 135, y: 33),
         Size = new Size(width: 140, height: 20),
+        //AutoSize = true,
         Checked = true,
     };
 
@@ -1015,6 +1039,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Text = "unique edge weights",
         Location = new Point(x: 135, y: 54),
         Size = new Size(width: 140, height: 20),
+        //AutoSize = true,
         Checked = false,
     };
 
@@ -1022,6 +1047,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Text = "high quality PRNG",
         Location = new Point(x: 135, y: 76),
         Size = new Size(width: 140, height: 20),
+        //AutoSize = true,
         Checked = false,
     };
 
@@ -1029,6 +1055,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Text = "Loading...",
         Location = new Point(x: 10, y: 102),
         Size = new Size(width: 250, height: 15),
+        //AutoSize = true,
         ReadOnly = true,
         BorderStyle = WF.BorderStyle.None,
         ForeColor = Color.Brown,
@@ -1042,6 +1069,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Text = "Generate",
         Location = new Point(x: 15, y: 125),
         Size = new Size(width: 80, height: 30),
+        //AutoSize = true,
         Enabled = false,
     };
 
@@ -1049,6 +1077,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Text = "Cancel",
         Location = new Point(x: 100, y: 125),
         Size = new Size(width: 80, height: 30),
+        //AutoSize = true,
         Enabled = false,
     };
 
@@ -1056,6 +1085,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Text = "Close",
         Location = new Point(x: 185, y: 125),
         Size = new Size(width: 80, height: 30),
+        //AutoSize = true,
     };
 
     private readonly WF.ToolTip _toolTip = new WF.ToolTip();
