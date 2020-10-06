@@ -457,17 +457,54 @@ internal sealed class FibonacciHeap<TKey, TValue>
 
     private void Decrease(Node child)
     {
-        // FIXME: implement this
+        if (child.Parent != null) {
+            var parent = child.Parent; // Remember it for CascadingCut.
+            if (_comparer.Compare(child.Value, parent.Value) < 0) {
+                Cut(child);
+                CascadingCut(parent);
+            }
+        }
+
+        Debug.Assert(_min != null);
+        if (_comparer.Compare(child.Value, _min.Value) < 0) _min = child;
     }
 
-    private void Cut(Node parent, Node child)
+    private void Cut(Node child)
     {
-        // FIXME: implement this
+        Debug.Assert(child.Parent != null);
+        Debug.Assert(_min != null);
+
+        if (child == child.Next) {
+            Debug.Assert(child.Parent.Child == child);
+            child.Parent.Child = null;
+        } else {
+            if (child.Parent.Child == child) child.Parent.Child = child.Next;
+            child.Prev.Next = child.Next;
+            child.Next.Prev = child.Prev;
+        }
+
+        --child.Parent.Degree;
+        child.Parent = null;
+        child.Mark = false;
+
+        child.Prev = _min;
+        child.Next = _min.Next;
+        child.Prev.Next = child.Next.Prev = child;
     }
 
     private void CascadingCut(Node node)
     {
-        // FIXME: implement this
+        // TODO: Maybe implement this iteratively.
+
+        if (node.Parent == null) return;
+
+        if (node.Mark) {
+            var parent = node.Parent; // Remember it for the recursive call.
+            Cut(node);
+            CascadingCut(parent);
+        } else {
+            node.Mark = true;
+        }
     }
 
     private object ToDump() => new { Count, Roots = NodesInChain(_min) };
