@@ -2,6 +2,9 @@
   <Namespace>LINQPad.Controls</Namespace>
 </Query>
 
+#load "./helpers.linq"
+#load "./generator.linq"
+
 /// <summary>Configuration options not exposed by the controller.</summary>
 internal static class Options {
     internal static bool DisableControlsWhileProcessing => true;
@@ -532,18 +535,6 @@ internal sealed class WrongQueue<TKey, TValue> : IPriorityQueue<TKey, TValue> {
                 + " which only pretends to take input");
 }
 
-/// <summary>An edge in a weighted directed graph.</summary>
-internal readonly struct Edge {
-    internal Edge(int src, int dest, int weight)
-        => (Src, Dest, Weight) = (src, dest, weight);
-
-    internal int Src { get; }
-
-    internal int Dest { get; }
-
-    internal int Weight { get; }
-}
-
 /// <summary>Convenience functions for marked edges.</summary>
 internal static class MarkedEdge {
     internal static MarkedEdge<T> Create<T>(Edge edge, T mark)
@@ -896,11 +887,15 @@ internal sealed class Controller {
 
     internal void Show()
     {
+        _generate.Dump();
+
         _order.Dump("Order");
         _edges.Dump("Edges");
         _source.Dump("Source");
+
         _pqConfig.Dump("Priority queues");
         _outputConfig.Dump("Output");
+
         _buttons.Dump();
     }
 
@@ -931,6 +926,12 @@ internal sealed class Controller {
                        string initialSource,
                        IList<PriorityQueueItem> priorityQueues)
     {
+        _generatorDialog.Generating += generatorDialog_Generating;
+        _generatorDialog.Generated += generatorDialog_Generated;
+
+        _generate = new Button("Generate a graph...",
+                               delegate { _generatorDialog.DisplayDialog(); });
+
         _order = new TextBox(initialOrder, width: "60px");
         _edges = new TextArea(initialEdges, columns: 50) { Rows = 20 };
         _source = new TextBox(initialSource, width: "60px");
@@ -973,6 +974,45 @@ internal sealed class Controller {
         }
     }
 
+    private void generatorDialog_Generating(object sender,
+                                            GraphGeneratingEventArgs e)
+    {
+        //_generatorDialog.Generated -= generatorDialog_Generated;
+
+        _order.Text = e.Order.ToString();
+
+        _edges.Text = (e.Size == 1 ? $"# Generating 1 edge..."
+                                   : $"# Generating {e.Size} edges...");
+
+        // TODO: What should source be set to, if anything?
+
+        MaybeDisableAllControls();
+    }
+
+    // TODO: Populating the edges can lag the UI. Would setting IsMultithreaded
+    // on the textarea ameliorate this? Would it introduce other problems?
+    private void generatorDialog_Generated(object sender,
+                                           GraphGeneratedEventArgs e)
+    {
+        _order.Text = e.Order.ToString();
+
+        Debug.Assert(e.Edges.Count == e.Size);
+
+        // TODO: Extract this shared logic to its own method.
+        _edges.Text = (e.Size == 1 ? $"# Populating 1 edge..."
+                                   : $"# Populating {e.Size} edges...");
+
+        //_generatorDialog.Generated += generatorDialog_Generated;
+
+        // FIXME: DRY (Something like this is already elsewhere, right?)
+        var lines = from edge in e.Edges
+                    select $"{edge.Src} {edge.Dest} {edge.Weight}";
+
+        _edges.Text = string.Join(Environment.NewLine, lines);
+
+        MaybeEnableAllControls();
+    }
+
     private void run_Click(Button sender)
     {
         MaybeDisableAllControls();
@@ -1003,6 +1043,15 @@ internal sealed class Controller {
         }
     }
 
+    // TODO: Fix the LINQPad "<limit of graph>" bug with large graphs (which
+    // would otherwise be fully usable for generating parents tables, as they
+    // have only O(|V|) rows). This may require a redesign of how the controls
+    // in the main (i.e., "dumped") interface are managed. A textarea with huge
+    // contents may not be .Dump-able. The contents can be changed after the
+    // dump, but the lag would be unsettling since it doesn't coincide with any
+    // big computation. Perhaps the output should be placed in some kind of
+    // container that supports adding/removing or showing/hiding in real time,
+    // so that the UI (other than output) never has to be re-.Dump'd.
     private void clear_Click(Button sender)
     {
         var order = _order.Text;
@@ -1085,6 +1134,11 @@ internal sealed class Controller {
         => _pqConfig.Children
             .Concat(_outputConfig.Children)
             .Cast<CheckBox>();
+
+    private readonly GraphGeneratorDialog _generatorDialog =
+        new GraphGeneratorDialog();
+
+    private readonly Button _generate;
 
     private readonly TextBox _order;
 
@@ -1175,6 +1229,8 @@ private static void Main()
            group result.label by result.parents into grp
            select (parents: grp.Key, labels: grp.ToList());
 
+    // TODO: Do the work asynchronously, primarily for responsiveness, but also
+    // so the computations on different priority queues are done in parallel.
     controller.SingleRun += (graph, source, supplier, label) => {
         var parents = graph.ComputeShortestPaths(source, supplier);
         results.Add((label, parents));
