@@ -1,1 +1,1 @@
-dijkstra.linq text diff=csharp linguist-language=csharp
+*.linq text diff=csharp linguist-language=csharp
