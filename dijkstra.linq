@@ -6,6 +6,7 @@
 internal static class Options {
     internal static bool DisableControlsWhileProcessing => true;
     internal static bool OfferWrongQueue => false;
+    internal static bool DebugFibonacciHeap => false;
 }
 
 /// <summary>LINQ-style extension methods.</summary>
@@ -258,6 +259,265 @@ internal sealed class BinaryHeap<TKey, TValue> : IPriorityQueue<TKey, TValue>
 }
 
 /// <summary>
+/// A Fibonacci minheap providing priority queue operations for Prim's and
+/// Dijkstra's algorithms.
+/// </summary>
+/// <remarks>O(1) insert/decrease. O(log n) extract-min. (Amortized.)</remarks>
+[InformalName("Fibonacci heap")] // Otherwise it would not show up capitalized.
+internal sealed class FibonacciHeap<TKey, TValue>
+        : IPriorityQueue<TKey, TValue> where TKey : notnull {
+    internal FibonacciHeap() : this(Comparer<TValue>.Default) { }
+
+    internal FibonacciHeap(IComparer<TValue> comparer)
+        => _comparer = comparer;
+
+    public int Count => _map.Count;
+
+    public bool InsertOrDecrease(TKey key, TValue value)
+    {
+        if (!_map.TryGetValue(key, out var node)) {
+            Insert(key, value);
+        } else if (_comparer.Compare(value, node.Value) < 0) {
+            node.Value = value;
+            Decrease(node);
+        } else {
+            return false;
+        }
+
+        return true;
+    }
+
+    public KeyValuePair<TKey, TValue> ExtractMin()
+    {
+        if (Count == 0)
+            throw new InvalidOperationException("Nothing to extract");
+
+        var node = ExtractMinNode();
+        _map.Remove(node.Key);
+        if (Options.DebugFibonacciHeap) this.Dump(noTotals: true);
+        return KeyValuePair.Create(node.Key, node.Value);
+    }
+
+    private sealed class Node {
+        internal Node(TKey key, TValue value)
+            => (Key, Value, Prev, Next) = (key, value, this, this);
+
+        internal TKey Key { get; }
+
+        internal TValue Value { get; set; }
+
+        internal Node? Parent { get; set; } = null;
+
+        internal Node Prev { get; set; }
+
+        internal Node Next { get; set; }
+
+        internal Node? Child { get; set; } = null;
+
+        internal int Degree { get; set; } = 0;
+
+        internal bool Mark { get; set; } = false;
+
+        private object ToDump() => new {
+            Key,
+            Value,
+            Degree,
+            Mark,
+            Children = NodesInChain(Child)
+        };
+    }
+
+    /// <summary>Yields this node (if any) and its siblings, lazily.</summary>
+    /// <remarks>
+    /// Call <c>ToList</c> if adding or removing nodes during iteration.
+    /// </remarks>
+    private static IEnumerable<Node> NodesInChain(Node? node)
+    {
+        if (node == null) yield break;
+
+        yield return node;
+
+        for (var sibling = node.Next; sibling != node; sibling = sibling.Next)
+            yield return sibling;
+    }
+
+    private static readonly double GoldenRatio = (1.0 + Math.Sqrt(5.0)) / 2.0;
+
+    /// <summary>The maximum degree is no more than this.</summary>
+    private int DegreeCeiling => (int)Math.Log(a: Count, newBase: GoldenRatio);
+
+    private void Insert(TKey key, TValue value)
+    {
+        var node = new Node(key, value);
+        InsertNode(node);
+        _map.Add(key, node);
+    }
+
+    private void InsertNode(Node node)
+    {
+        Debug.Assert((_min == null) == (Count == 0));
+        Debug.Assert(node.Next == node && node.Parent == null);
+
+        if (_min == null) {
+            _min = node;
+        } else {
+            node.Prev = _min;
+            node.Next = _min.Next;
+            node.Prev.Next = node.Next.Prev = node;
+
+            if (_comparer.Compare(node.Value, _min.Value) < 0) _min = node;
+        }
+    }
+
+    private Node ExtractMinNode()
+    {
+        // TODO: Factor some parts out into helper methods.
+        Debug.Assert(_min != null);
+        var parent = _min;
+
+        if (parent.Child != null) {
+            var child = parent.Child;
+
+            // Tell the children their root is about to go away.
+            do { // for each child
+                child.Parent = null;
+                child = child.Next;
+            } while (child != parent.Child);
+
+            // Splice the children up into the root chain.
+            child.Prev.Next = parent.Next;
+            parent.Next.Prev = child.Prev;
+            child.Prev = parent;
+            parent.Next = child;
+        }
+
+        if (parent == parent.Next) {
+            // There are no other roots, so just make the forest empty.
+            _min = null;
+        } else {
+            // Remove the minimum node.
+            _min = parent.Prev.Next = parent.Next;
+            parent.Next.Prev = parent.Prev;
+            parent.Prev = parent.Next = parent; // to avoid confusion
+
+            Consolidate();
+        }
+
+        return parent;
+    }
+
+    private void Consolidate()
+    {
+        var roots_by_degree = new Node?[DegreeCeiling + 1];
+
+        // Link trees together so no two roots have the same degree.
+        foreach (var root in NodesInChain(_min).ToList()) {
+            var parent = root;
+            var degree = parent.Degree;
+
+            for (; ; ) {
+                var child = roots_by_degree[degree];
+                if (child == null) break;
+
+                if (_comparer.Compare(child.Value, parent.Value) < 0)
+                    (parent, child) = (child, parent);
+
+                Link(parent, child);
+                roots_by_degree[degree++] = null;
+            }
+
+            roots_by_degree[degree] = parent;
+        }
+
+        // Reattach the linked list of roots, at the minimum node.
+        _min = roots_by_degree
+                .OfType<Node>() // skip nulls
+                .MinBy(node => node.Value, _comparer);
+    }
+
+    private void Link(Node parent, Node child)
+    {
+        Debug.Assert(parent.Parent == null && child.Parent == null);
+
+        child.Prev.Next = child.Next;
+        child.Next.Prev = child.Prev;
+        child.Parent = parent;
+        child.Mark = false;
+
+        if (parent.Child == null) {
+            parent.Child = child.Prev = child.Next = child;
+        } else {
+            child.Prev = parent.Child;
+            child.Next = parent.Child.Next;
+            child.Prev.Next = child.Next.Prev = child;
+        }
+
+        ++parent.Degree;
+    }
+
+    private void Decrease(Node child)
+    {
+        if (child.Parent != null) {
+            var parent = child.Parent; // Remember it for CascadingCut.
+            if (_comparer.Compare(child.Value, parent.Value) < 0) {
+                Cut(child);
+                CascadingCut(parent);
+            }
+        }
+
+        Debug.Assert(_min != null);
+        if (_comparer.Compare(child.Value, _min.Value) < 0) _min = child;
+    }
+
+    private void Cut(Node child)
+    {
+        Debug.Assert(child.Parent != null);
+        Debug.Assert(_min != null);
+
+        if (child == child.Next) {
+            Debug.Assert(child.Parent.Child == child);
+            child.Parent.Child = null;
+        } else {
+            if (child.Parent.Child == child) child.Parent.Child = child.Next;
+            child.Prev.Next = child.Next;
+            child.Next.Prev = child.Prev;
+        }
+
+        --child.Parent.Degree;
+        child.Parent = null;
+        child.Mark = false;
+
+        child.Prev = _min;
+        child.Next = _min.Next;
+        child.Prev.Next = child.Next.Prev = child;
+    }
+
+    private void CascadingCut(Node node)
+    {
+        // TODO: Maybe implement this iteratively.
+
+        if (node.Parent == null) return;
+
+        if (node.Mark) {
+            var parent = node.Parent; // Remember it for the recursive call.
+            Cut(node);
+            CascadingCut(parent);
+        } else {
+            node.Mark = true;
+        }
+    }
+
+    private object ToDump() => new { Count, Roots = NodesInChain(_min) };
+
+    private Node? _min = null;
+
+    private readonly IDictionary<TKey, Node> _map =
+        new Dictionary<TKey, Node>();
+
+    private readonly IComparer<TValue> _comparer;
+}
+
+/// </summary>
 /// A fake priority queue that swallows all input, for testing.
 /// </summary>
 [InformalName("wrongqueue is wrooooooong")]
@@ -877,7 +1137,8 @@ private static Controller BuildController()
         .Edge(5, 5, 1)
         .Source(0)
         .PQ(typeof(UnsortedArrayPriorityQueue<,>))
-        .PQ(typeof(BinaryHeap<,>));
+        .PQ(typeof(BinaryHeap<,>))
+        .PQ(typeof(FibonacciHeap<,>));
 
     if (Options.OfferWrongQueue)
         builder.PQ(typeof(WrongQueue<,>), selected: false);
