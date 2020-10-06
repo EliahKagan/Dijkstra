@@ -788,7 +788,11 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     {
         _cancel.Text = "Cancelling...";
         _cancel.Enabled = false;
+
         // FIXME: implement the actual cancellation logic!
+
+        WF.MessageBox.Show(text: "Cancellation is not yet implemented. Sorry!",
+                           caption: "Sorry!");
     }
 
     private void SetToolTip(WF.Control control, string text)
