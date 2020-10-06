@@ -709,6 +709,8 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Controls.Cast<WF.Control>().Select(control => new {
             control.Text,
             control.AutoSize }).Dump();
+
+        new { Size, ClientSize }.Dump();
     }
 
     private void GraphGeneratorDialog_FormClosing(object sender,
@@ -1116,11 +1118,13 @@ internal sealed class TestHarness {
         _clearResults.Click += clearResults_Click;
         _toggleSubscription.Click += toggleSubscription_Click;
         _specifyBigTest.Click += specifyBigTest_Click;
+        _setTooWideStatus.Click += setTooWideStatus_Click;
 
         _panel = new LC.WrapPanel(_openGraphGenerator,
                                   _clearResults,
                                   _toggleSubscription,
-                                  _specifyBigTest);
+                                  _specifyBigTest,
+                                  _setTooWideStatus);
     }
 
     internal void Show(bool displayDialog)
@@ -1162,6 +1166,11 @@ internal sealed class TestHarness {
             dialog._highQualityPrng.Checked = true;
         }));
 
+    private void setTooWideStatus_Click(object? sender, EventArgs e)
+        => _dialog.Uncapsulate().StatusWaiting(
+            "Status text goes here in this place yes and it is wide"
+            + " to see what happens when it is very very wide");
+
     private void dialog_Generated(object sender, GraphGeneratedEventArgs e)
         => new EdgeList(e.Order, e.Size, e.Edges).Dump(noTotals: true);
 
@@ -1177,6 +1186,9 @@ internal sealed class TestHarness {
 
     private readonly LC.Button _specifyBigTest =
         new LC.Button("Specify Big Test");
+
+    private readonly LC.Button _setTooWideStatus =
+        new LC.Button("Set Too-Wide Status");
 
     private readonly LC.WrapPanel _panel;
 
