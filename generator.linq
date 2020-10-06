@@ -704,13 +704,6 @@ internal sealed class GraphGeneratorDialog : WF.Form {
             _formShownBefore = true;
             ReadState();
         }
-
-        // FIXME: remove after debugging
-        Controls.Cast<WF.Control>().Select(control => new {
-            control.Text,
-            control.AutoSize }).Dump();
-
-        new { Size, ClientSize }.Dump();
     }
 
     private void GraphGeneratorDialog_FormClosing(object sender,
