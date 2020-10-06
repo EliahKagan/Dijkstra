@@ -73,7 +73,7 @@ internal sealed class LayoutExperiment : Form {
         ColumnCount = 2,
         GrowStyle = TableLayoutPanelGrowStyle.FixedSize,
         AutoSize = true,
-        Margin = new Padding(left: 1, top: 3, right: 4, bottom: 3),
+        Margin = new Padding(left: 1, top: 4, right: 4, bottom: 3),
     };
 
     private readonly Label _orderLabel = new Label {
@@ -122,34 +122,34 @@ internal sealed class LayoutExperiment : Form {
         FlowDirection = FlowDirection.TopDown,
         AutoSize = true,
         WrapContents = false,
-        Margin = new Padding(left: 4, top: 3, right: 3, bottom: 3),
+        Margin = new Padding(left: 4, top: 4, right: 3, bottom: 3),
     };
 
     private readonly CheckBox _allowLoops = new CheckBox {
         Text = "allow loops",
         AutoSize = true,
-        Margin = new Padding(left: 3, top: 2, right: 3, bottom: 1),
+        Margin = new Padding(left: 3, top: 1, right: 3, bottom: 1),
         Checked = true,
     };
 
     private readonly CheckBox _allowParallelEdges = new CheckBox {
         Text = "allow parallel edges",
         AutoSize = true,
-        Margin = new Padding(left: 3, top: 2, right: 3, bottom: 1),
+        Margin = new Padding(left: 3, top: 1, right: 3, bottom: 1),
         Checked = true,
     };
 
     private readonly CheckBox _uniqueEdgeWeights = new CheckBox {
         Text = "unique edge weights",
         AutoSize = true,
-        Margin = new Padding(left: 3, top: 2, right: 3, bottom: 1),
+        Margin = new Padding(left: 3, top: 1, right: 3, bottom: 1),
         Checked = false,
     };
 
     private readonly CheckBox _highQualityPrng = new CheckBox {
         Text = "high quality PRNG",
         AutoSize = true,
-        Margin = new Padding(left: 3, top: 2, right: 3, bottom: 1),
+        Margin = new Padding(left: 3, top: 1, right: 3, bottom: 1),
         Checked = false,
     };
 
