@@ -584,9 +584,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     private void SetFormProperties()
     {
-        //AutoScaleDimensions = new SizeF(6f, 13f);
         AutoScaleDimensions = new SizeF(7f, 15f);
-        //AutoScaleBaseSize = new Size(7, 15);
         AutoScaleMode = WF.AutoScaleMode.Font;
         AutoSize = true;
 
@@ -600,7 +598,6 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private void SubscribeFormEvents()
     {
         HandleCreated += GraphGeneratorDialog_HandleCreated;
-        //Load += delegate { PerformAutoScale(); };
         Shown += GraphGeneratorDialog_FormShown;
         FormClosing += GraphGeneratorDialog_FormClosing;
         Activated += GetOpacitySetter(ActiveOpacity);
