@@ -16,11 +16,14 @@ internal static class Options {
 internal static class EnumerableExtensions {
     internal static TSource
     MinBy<TSource, TKey>(this IEnumerable<TSource> source,
-                         Func<TSource, TKey> keySelector,
-                         IComparer<TKey>? comparer = null)
-    {
-        comparer ??= Comparer<TKey>.Default;
+                         Func<TSource, TKey> keySelector)
+        => source.MinBy(keySelector, Comparer<TKey>.Default);
 
+    internal static TSource
+    MinBy<TSource, TKey>(this IEnumerable<TSource> source,
+                         Func<TSource, TKey> keySelector,
+                         IComparer<TKey> comparer)
+    {
         using var en = source.GetEnumerator();
 
         if (!en.MoveNext())
