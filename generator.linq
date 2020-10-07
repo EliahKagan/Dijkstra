@@ -686,7 +686,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
         // "T" in "Alt+T" was cut off on the right. "\r" fixes this, somehow.
         AddMenuItem(MyMenuItemId.Translucent,
-                    $"&Translucent\tAlt+T\r", @checked: true);
+                    $"&Translucent\tAlt+T\r", @checked: _translucent);
 
         AddMenuItem(MyMenuItemId.StatusCaret,
                     "Stat&us caret\tF7", @checked: false);
