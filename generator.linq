@@ -1077,7 +1077,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
     private readonly WF.ToolTip _toolTip = new WF.ToolTip();
 
     private bool _formShownBefore = false;
-    private bool _translucent = true;
+    private bool _translucent = false;
     private bool _wantStatusCaret = false;
     private bool _working = false;
 
