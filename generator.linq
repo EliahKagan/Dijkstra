@@ -917,6 +917,9 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         _wantStatusCaret = !_wantStatusCaret;
         SetMenuItemCheck(MyMenuItemId.StatusCaret, _wantStatusCaret);
         SetStatusToolTip();
+        _status.Cursor = (_wantStatusCaret ? WF.Cursors.IBeam
+                                           : WF.Cursors.Arrow);
+
         if (_status.ContainsFocus) ApplyStatusCaretPreference();
     }
 
