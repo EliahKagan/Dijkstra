@@ -1320,6 +1320,8 @@ private static void Main()
               => "YES, multiple results are consistent.",
             1 => "Technically yes, but there is only one set of results.",
             _ => "NO! Multiple results are inconsistent!"
+                    + Environment.NewLine
+                    + "(This is okay if there is more than one solution.)"
          }).Dump("Same results with all data structures?");
 
         foreach (var (parents, labels) in groups) {
