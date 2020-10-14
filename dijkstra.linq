@@ -1065,10 +1065,7 @@ internal sealed class Controller {
         //_generatorDialog.Generated -= generatorDialog_Generated;
 
         _order.Text = e.Order.ToString();
-
-        _edges.Text = (e.Size == 1 ? $"# Generating 1 edge..."
-                                   : $"# Generating {e.Size} edges...");
-
+        ExplainEdgeDelay("Generating", e.Size);
         // TODO: What should source be set to, if anything?
 
         MaybeDisableAllControls();
@@ -1082,10 +1079,7 @@ internal sealed class Controller {
         _order.Text = e.Order.ToString();
 
         Debug.Assert(e.Edges.Count == e.Size);
-
-        // TODO: Extract this shared logic to its own method.
-        _edges.Text = (e.Size == 1 ? $"# Populating 1 edge..."
-                                   : $"# Populating {e.Size} edges...");
+        ExplainEdgeDelay("Populating", e.Size);
 
         //_generatorDialog.Generated += generatorDialog_Generated;
 
@@ -1218,6 +1212,10 @@ internal sealed class Controller {
         => _pqConfig.Children
             .Concat(_outputConfig.Children)
             .Cast<CheckBox>();
+
+    private void ExplainEdgeDelay(string verb, int size)
+        => _edges.Text = (size == 1 ? $"{verb} 1 edge"
+                                    : $"{verb} {size} edges...");
 
     private readonly GraphGeneratorDialog _generatorDialog =
         new GraphGeneratorDialog();
