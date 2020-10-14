@@ -208,11 +208,11 @@ internal sealed class SortedSetPriorityQueue<TKey, TValue>
 
     private static IComparer<KeyValuePair<TKey, TValue>>
     GetEntryComparer(IComparer<TValue> valueComparer)
-        => Comparer<KeyValuePair<TKey, TValue>>.Create(
-            (lhs, rhs) => valueComparer.Compare(lhs.Value, rhs.Value) switch {
-                0 => Comparer<TKey>.Default.Compare(lhs.Key, rhs.Key),
-                var byValue => byValue
-            });
+        => Comparer<KeyValuePair<TKey, TValue>>.Create((lhs, rhs) => {
+            var byValue = valueComparer.Compare(lhs.Value, rhs.Value);
+            if (byValue != 0) return byValue;
+            return Comparer<TKey>.Default.Compare(lhs.Key, rhs.Key);
+        });
 
     private readonly IComparer<TValue> _valueComparer;
 
