@@ -1141,6 +1141,9 @@ internal sealed class Controller {
 
         Util.ClearResults();
 
+        // TODO: Compute and report graph size while restoring _edges.Text,
+        // since it will take time if there are many of them.
+
         _order.Text = order;
         _edges.Text = edges;
         _source.Text = source;
@@ -1169,21 +1172,23 @@ internal sealed class Controller {
     }
 
     private (int src, int dest, int weight)[] ReadEdges()
-        => _edges.Text
-                 .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                 .Select(StripCommentsAndWhitespace)
-                 .Where(line => !string.IsNullOrWhiteSpace(line))
-                 .Select(line =>
-                    line.Split(default(char[]?),
-                               StringSplitOptions.RemoveEmptyEntries)
-                        .Select(int.Parse)
-                        .ToArray())
-                 .Select(vals =>
-                    vals.Length == 3
-                        ? (src: vals[0], dest: vals[1], weight: vals[2])
-                        : throw new InvalidOperationException(
-                                message: "wrong record length"))
-                 .ToArray();
+        => EdgeStrings(_edges.Text)
+            .Select(line =>
+                line.Split(default(char[]?),
+                           StringSplitOptions.RemoveEmptyEntries)
+                    .Select(int.Parse)
+                    .ToArray())
+            .Select(vals =>
+                vals.Length == 3
+                    ? (src: vals[0], dest: vals[1], weight: vals[2])
+                    : throw new InvalidOperationException(
+                            message: "wrong record length"))
+            .ToArray();
+
+    private IEnumerable<string> EdgeStrings(string edgeInput)
+        => edgeInput.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(StripCommentsAndWhitespace)
+                    .Where(line => !string.IsNullOrWhiteSpace(line));
 
     void MaybeDisableAllControls()
     {
