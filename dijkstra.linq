@@ -154,6 +154,87 @@ internal sealed class UnsortedPriorityQueue<TKey, TValue>
 }
 
 /// <summary>
+/// A priority queue for Prim's and Dijkstra's algorithms, based on a
+/// self-balancing binary search tree.
+/// </summary>
+/// <remarks>
+/// O(log n) insert/decrease. O(log n) extract-min.
+/// <para>
+/// This is the same time complexity as <see cref="BinaryHeap"/>, but this is
+/// likely to be slower by a constant factor. Prefer <see cref="BinaryHeap"/>.
+/// </para>
+/// <para>
+/// This uses <see cref="System.Collections.Generic.SortedSet"/>, which is
+/// implemented as a red-black tree.
+/// </para>
+/// </remarks>
+[InformalName("red-black tree")]
+internal sealed class SortedSetPriorityQueue<TKey, TValue>
+        : IPriorityQueue<TKey, TValue> where TKey : notnull {
+    internal SortedSetPriorityQueue() : this(Comparer<TValue>.Default) { }
+
+    internal SortedSetPriorityQueue(IComparer<TValue> comparer)
+    {
+        _valueComparer = comparer;
+
+        _tree = new SortedSet<KeyValuePair<TKey, TValue>>(
+                        new EntryComparer(comparer));
+    }
+
+    public int Count => _tree.Count;
+
+    public bool InsertOrDecrease(TKey key, TValue value)
+    {
+        if (_map.TryGetValue(key, out var oldValue)) {
+            if (_valueComparer.Compare(oldValue, value) <= 0) return false;
+            _tree.Remove(KeyValuePair.Create(key, oldValue));
+        }
+
+        _map[key] = value;
+        _tree.Add(KeyValuePair.Create(key, value));
+        return true;
+    }
+
+    public KeyValuePair<TKey, TValue> ExtractMin()
+    {
+        if (Count == 0)
+            throw new InvalidOperationException("Nothing to extract");
+
+        var min = _tree.Min;
+        _tree.Remove(min);
+        _map.Remove(min.Key);
+        return min;
+    }
+
+    private sealed class EntryComparer
+            : IComparer<KeyValuePair<TKey, TValue>> {
+        internal EntryComparer(IComparer<TValue> valueComparer)
+        {
+            _keyComparer = Comparer<TKey>.Default; // For tie-breaking.
+            _valueComparer = valueComparer;
+        }
+
+        public int Compare(KeyValuePair<TKey, TValue> lhs,
+                           KeyValuePair<TKey, TValue> rhs)
+            => _valueComparer.Compare(lhs.Value, rhs.Value) switch {
+                0           => _keyComparer.Compare(lhs.Key, rhs.Key),
+                var byValue => byValue
+            };
+
+        private readonly IComparer<TValue> _valueComparer;
+
+        private readonly IComparer<TKey> _keyComparer; // For tie-breaking.
+    }
+
+    private readonly IComparer<TValue> _valueComparer;
+
+    private readonly SortedSet<KeyValuePair<TKey, TValue>> _tree;
+
+    private readonly IDictionary<TKey, TValue> _map =
+        new Dictionary<TKey, TValue>();
+}
+
+/// <summary>
 /// A binary minheap providing priority queue operations for Prim's and
 /// Dijkstra's algorithms. Sometimes called a "heap + map" data structure.
 /// </summary>
@@ -1194,6 +1275,7 @@ private static Controller BuildController()
         .Edge(5, 5, 1)
         .Source(0)
         .PQ(typeof(UnsortedPriorityQueue<,>))
+        .PQ(typeof(SortedSetPriorityQueue<,>))
         .PQ(typeof(BinaryHeap<,>))
         .PQ(typeof(FibonacciHeap<,>));
 
