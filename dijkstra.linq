@@ -178,7 +178,7 @@ internal sealed class SortedSetPriorityQueue<TKey, TValue>
         _valueComparer = comparer;
 
         _tree = new SortedSet<KeyValuePair<TKey, TValue>>(
-                        new EntryComparer(comparer));
+                        GetEntryComparer(comparer));
     }
 
     public int Count => _tree.Count;
@@ -206,23 +206,13 @@ internal sealed class SortedSetPriorityQueue<TKey, TValue>
         return min;
     }
 
-    private sealed class EntryComparer
-            : IComparer<KeyValuePair<TKey, TValue>> {
-        internal EntryComparer(IComparer<TValue> valueComparer)
-            => _valueComparer = valueComparer;
-
-        public int Compare(KeyValuePair<TKey, TValue> lhs,
-                           KeyValuePair<TKey, TValue> rhs)
-            => _valueComparer.Compare(lhs.Value, rhs.Value) switch {
-                0           => _keyComparer.Compare(lhs.Key, rhs.Key),
+    private static IComparer<KeyValuePair<TKey, TValue>>
+    GetEntryComparer(IComparer<TValue> valueComparer)
+        => Comparer<KeyValuePair<TKey, TValue>>.Create(
+            (lhs, rhs) => valueComparer.Compare(lhs.Value, rhs.Value) switch {
+                0 => Comparer<TKey>.Default.Compare(lhs.Key, rhs.Key),
                 var byValue => byValue
-            };
-
-        private readonly IComparer<TValue> _valueComparer;
-
-        /// <summary>Break ties by comparing keys.</summary>
-        private readonly IComparer<TKey> _keyComparer = Comparer<TKey>.Default;
-    }
+            });
 
     private readonly IComparer<TValue> _valueComparer;
 
