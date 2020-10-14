@@ -1031,6 +1031,12 @@ internal sealed class Controller {
         _buttons = new WrapPanel(_run, new Button("Clear", clear_Click));
     }
 
+    private static string StripCommentsAndWhitespace(string line)
+        => line.Before('#').Trim();
+
+    private static int ParseValue(TextBox textBox)
+        => int.Parse(StripCommentsAndWhitespace(textBox.Text));
+
     private void
     PopulatePriorityQueueControls(IList<PriorityQueueItem> priorityQueues)
     {
@@ -1098,7 +1104,7 @@ internal sealed class Controller {
         try {
             // Fail fast on malformed graph input.
             var graph = BuildGraph();
-            var source = int.Parse(_source.Text);
+            var source = ParseValue(_source);
 
             // Don't respond to handler changes while running.
             var singleRun = SingleRun;
@@ -1160,7 +1166,7 @@ internal sealed class Controller {
 
     private Graph BuildGraph()
     {
-        var graph = new Graph(ReadOrder());
+        var graph = new Graph(ParseValue(_order));
 
         foreach (var (src, dest, weight) in ReadEdges())
             graph.Add(src, dest, weight);
@@ -1168,11 +1174,10 @@ internal sealed class Controller {
         return graph;
     }
 
-    private int ReadOrder() => int.Parse(_order.Text);
-
     private (int src, int dest, int weight)[] ReadEdges()
         => _edges.Text
                  .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                 .Select(StripCommentsAndWhitespace)
                  .Where(line => !string.IsNullOrWhiteSpace(line))
                  .Select(line =>
                     line.Split(default(char[]?),
