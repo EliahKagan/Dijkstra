@@ -46,6 +46,17 @@ internal static class EnumerableExtensions {
 }
 
 /// <summary>
+/// String parsing methods used in mutliple (conceptually unrealted) places.
+/// </summary>
+internal static class StringExtensions {
+    internal static string Before(this string text, char delimiter)
+    {
+        var end = text.IndexOf(delimiter);
+        return end == -1 ? text : text[0..end];
+    }
+}
+
+/// <summary>
 /// Supplies a custom informal name for a data structure.
 /// <see cref="TypeExtensions.GetInformalName(System.Type)"/>.
 /// </summary>
@@ -67,11 +78,7 @@ internal static class TypeExtensions {
         if (attrs.Length != 0)
             return ((InformalNameAttribute)attrs[0]).InformalName;
 
-        var name = type.Name;
-        var end = name.IndexOf('`');
-        if (end != -1) name = name[0..end];
-
-        return string.Join(" ", GetLowerCamelWords(name));
+        return string.Join(" ", GetLowerCamelWords(type.Name.Before('`')));
     }
 
     internal static Func<T> CreateSupplier<T>(this Type type) where T : notnull
