@@ -209,10 +209,7 @@ internal sealed class SortedSetPriorityQueue<TKey, TValue>
     private sealed class EntryComparer
             : IComparer<KeyValuePair<TKey, TValue>> {
         internal EntryComparer(IComparer<TValue> valueComparer)
-        {
-            _keyComparer = Comparer<TKey>.Default; // For tie-breaking.
-            _valueComparer = valueComparer;
-        }
+            => _valueComparer = valueComparer;
 
         public int Compare(KeyValuePair<TKey, TValue> lhs,
                            KeyValuePair<TKey, TValue> rhs)
@@ -223,7 +220,8 @@ internal sealed class SortedSetPriorityQueue<TKey, TValue>
 
         private readonly IComparer<TValue> _valueComparer;
 
-        private readonly IComparer<TKey> _keyComparer; // For tie-breaking.
+        /// <summary>Break ties by comparing keys.</summary>
+        private readonly IComparer<TKey> _keyComparer = Comparer<TKey>.Default;
     }
 
     private readonly IComparer<TValue> _valueComparer;
