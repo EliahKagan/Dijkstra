@@ -1122,35 +1122,34 @@ internal sealed class Controller {
         }
     }
 
-    // TODO: Fix the LINQPad "<limit of graph>" bug with large graphs (which
-    // would otherwise be fully usable for generating parents tables, as they
-    // have only O(|V|) rows). This may require a redesign of how the controls
-    // in the main (i.e., "dumped") interface are managed. A textarea with huge
-    // contents may not be .Dump-able. The contents can be changed after the
-    // dump, but the lag would be unsettling since it doesn't coincide with any
-    // big computation. Perhaps the output should be placed in some kind of
-    // container that supports adding/removing or showing/hiding in real time,
-    // so that the UI (other than output) never has to be re-.Dump'd.
+    /// <summary>
+    /// Clears all output including the controller, and redraws the controller.
+    /// </summary>
     private void clear_Click(Button sender)
     {
+        // Save the controller state. For some reason, LINQPad controls
+        // sometimes lose the latest changes when Util.ClearResults is called.
         var order = _order.Text;
         var edges = _edges.Text;
         var source = _source.Text;
-
         var config = CheckBoxes.Select(cb => (cb, cb.Checked)).ToList();
 
         Util.ClearResults();
 
-        // TODO: Compute and report graph size while restoring _edges.Text,
-        // since it will take time if there are many of them.
-
+        // Restore the controller state, except don't repopulate the edges just
+        // yet. LINQPad will not dump more than a fixed amount of data. If the
+        // contents are too long (which happens at about a million edges),
+        // LINQPad outputs "<limit of graph>" and the controller is not fully
+        // drawn. If it were not for that problem, doing it this way would
+        // still have the benefit of avoiding unexplained lag when Clear is
+        // clicked.
         _order.Text = order;
-        _edges.Text = edges;
+        ExplainEdgeDelay("Repopulating", EdgeStrings(edges).Count());
         _source.Text = source;
-
         foreach (var (cb, selected) in config) cb.Checked = selected;
 
         Show();
+        _edges.Text = edges;
     }
 
     private void Configure(CheckBox sender)
