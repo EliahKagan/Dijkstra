@@ -350,7 +350,9 @@ internal sealed class GraphGenerator {
 
     private int ComputeMaxSize(int order)
     {
-        if (order == 0) return 0;
+        Debug.Assert(order >= 0);
+
+        if (order == 0 || (order == 1 && !_allowLoops)) return 0;
         if (_allowParallelEdges) return _sizes.Max;
         return (int)Math.Min(_sizes.Max, ComputeCompleteSize(order));
     }
