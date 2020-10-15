@@ -1196,13 +1196,13 @@ internal sealed class Controller {
                     .Select(StripCommentsAndWhitespace)
                     .Where(line => !string.IsNullOrWhiteSpace(line));
 
-    void MaybeDisableAllControls()
+    private void MaybeDisableAllControls()
     {
         if (Options.DisableControlsWhileProcessing)
             foreach (var control in Controls) control.Enabled = false;
     }
 
-    void MaybeEnableAllControls()
+    private void MaybeEnableAllControls()
     {
         if (Options.DisableControlsWhileProcessing)
             foreach (var control in Controls) control.Enabled = true;
