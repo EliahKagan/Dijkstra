@@ -120,11 +120,11 @@ internal interface IPriorityQueue<TKey, TValue> {
 /// A naive priority queue for Prim's and Dijkstra's algorithms.
 /// </summary>
 /// <remarks>O(1) insert/decrease. O(n) extract-min.</remarks>
-internal sealed class UnsortedArrayPriorityQueue<TKey, TValue>
+internal sealed class UnsortedPriorityQueue<TKey, TValue>
         : IPriorityQueue<TKey, TValue> where TKey : notnull {
-    internal UnsortedArrayPriorityQueue() : this(Comparer<TValue>.Default) { }
+    internal UnsortedPriorityQueue() : this(Comparer<TValue>.Default) { }
 
-    internal UnsortedArrayPriorityQueue(IComparer<TValue> comparer)
+    internal UnsortedPriorityQueue(IComparer<TValue> comparer)
         => _comparer = comparer;
 
     public int Count => _entries.Count;
@@ -933,7 +933,7 @@ private static Controller BuildController()
         .Edge(6, 3, 68)
         .Edge(5, 5, 1)
         .Source(0)
-        .PQ(typeof(UnsortedArrayPriorityQueue<,>))
+        .PQ(typeof(UnsortedPriorityQueue<,>))
         .PQ(typeof(BinaryHeap<,>));
 
     if (Options.OfferWrongQueue)
