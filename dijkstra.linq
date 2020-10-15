@@ -1218,7 +1218,7 @@ internal sealed class Controller {
             .Cast<CheckBox>();
 
     private void ExplainEdgeDelay(string verb, int size)
-        => _edges.Text = (size == 1 ? $"{verb} 1 edge"
+        => _edges.Text = (size == 1 ? $"{verb} 1 edge..."
                                     : $"{verb} {size} edges...");
 
     private readonly GraphGeneratorDialog _generatorDialog =
