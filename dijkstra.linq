@@ -7,7 +7,7 @@
 
 /// <summary>Configuration options not exposed by the controller.</summary>
 internal static class Options {
-    internal static bool DisableControlsWhileProcessing => true;
+    internal static bool DisableInputWhileProcessing => true;
     internal static bool OfferWrongQueue => false;
     internal static bool DebugFibonacciHeap => false;
 }
@@ -1075,7 +1075,7 @@ internal sealed class Controller {
         ExplainEdgeDelay("Generating", e.Size);
         // TODO: What should source be set to, if anything?
 
-        MaybeDisableAllControls();
+        MaybeDisableInputControls();
     }
 
     // TODO: Populating the edges can lag the UI. Would setting IsMultithreaded
@@ -1096,12 +1096,12 @@ internal sealed class Controller {
 
         _edges.Text = string.Join(Environment.NewLine, lines);
 
-        MaybeEnableAllControls();
+        MaybeEnableInputControls();
     }
 
     private void run_Click(Button sender)
     {
-        MaybeDisableAllControls();
+        MaybeDisableInputControls();
         try {
             // Fail fast on malformed graph input.
             var graph = BuildGraph();
@@ -1125,7 +1125,7 @@ internal sealed class Controller {
 
             runsCompleted?.Invoke();
         } finally {
-            MaybeEnableAllControls();
+            MaybeEnableInputControls();
         }
     }
 
@@ -1196,19 +1196,20 @@ internal sealed class Controller {
                     .Select(StripCommentsAndWhitespace)
                     .Where(line => !string.IsNullOrWhiteSpace(line));
 
-    private void MaybeDisableAllControls()
+    private void MaybeDisableInputControls()
     {
-        if (Options.DisableControlsWhileProcessing)
-            foreach (var control in Controls) control.Enabled = false;
+        if (Options.DisableInputWhileProcessing)
+            foreach (var control in InputControls) control.Enabled = false;
     }
 
-    private void MaybeEnableAllControls()
+    private void MaybeEnableInputControls()
     {
-        if (Options.DisableControlsWhileProcessing)
-            foreach (var control in Controls) control.Enabled = true;
+        if (Options.DisableInputWhileProcessing)
+            foreach (var control in InputControls) control.Enabled = true;
     }
 
-    private IEnumerable<Control> Controls => TextControls.Concat(CheckBoxes);
+    private IEnumerable<Control> InputControls
+        => TextControls.Concat(CheckBoxes);
 
     private IEnumerable<Control> TextControls
     {
