@@ -4,7 +4,7 @@
 
 /// <summary>Configuration options not exposed by the controller.</summary>
 internal static class Options {
-    internal static bool DisableControlsWhileProcessing => true;
+    internal static bool DisableInputWhileProcessing => true;
     internal static bool OfferWrongQueue => false;
 }
 
@@ -718,7 +718,7 @@ internal sealed class Controller {
 
     private void run_Click(Button sender)
     {
-        MaybeDisableAllControls();
+        MaybeDisableInputControls();
         try {
             // Fail fast on malformed graph input.
             var graph = BuildGraph();
@@ -742,7 +742,7 @@ internal sealed class Controller {
 
             runsCompleted?.Invoke();
         } finally {
-            MaybeEnableAllControls();
+            MaybeEnableInputControls();
         }
     }
 
@@ -801,19 +801,20 @@ internal sealed class Controller {
                                 message: "wrong record length"))
                  .ToArray();
 
-    private void MaybeDisableAllControls()
+    private void MaybeDisableInputControls()
     {
-        if (Options.DisableControlsWhileProcessing)
-            foreach (var control in Controls) control.Enabled = false;
+        if (Options.DisableInputWhileProcessing)
+            foreach (var control in InputControls) control.Enabled = false;
     }
 
-    private void MaybeEnableAllControls()
+    private void MaybeEnableInputControls()
     {
-        if (Options.DisableControlsWhileProcessing)
-            foreach (var control in Controls) control.Enabled = true;
+        if (Options.DisableInputWhileProcessing)
+            foreach (var control in InputControls) control.Enabled = true;
     }
 
-    private IEnumerable<Control> Controls => TextControls.Concat(CheckBoxes);
+    private IEnumerable<Control> InputControls
+        => TextControls.Concat(CheckBoxes);
 
     private IEnumerable<Control> TextControls
     {
