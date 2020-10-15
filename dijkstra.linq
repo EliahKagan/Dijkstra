@@ -801,13 +801,13 @@ internal sealed class Controller {
                                 message: "wrong record length"))
                  .ToArray();
 
-    void MaybeDisableAllControls()
+    private void MaybeDisableAllControls()
     {
         if (Options.DisableControlsWhileProcessing)
             foreach (var control in Controls) control.Enabled = false;
     }
 
-    void MaybeEnableAllControls()
+    private void MaybeEnableAllControls()
     {
         if (Options.DisableControlsWhileProcessing)
             foreach (var control in Controls) control.Enabled = true;
