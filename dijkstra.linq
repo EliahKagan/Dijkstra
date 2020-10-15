@@ -167,8 +167,8 @@ internal sealed class UnsortedPriorityQueue<TKey, TValue>
 /// <remarks>
 /// O(log n) insert/decrease. O(log n) extract-min.
 /// <para>
-/// This is the same time complexity as <see cref="BinaryHeap"/>, but this is
-/// likely to be slower by a constant factor. Prefer <see cref="BinaryHeap"/>.
+/// Prefer <see cref="BinaryHeap"/> to this. They have the same asymptotic
+/// runtimes, but this is likely to be slower by a constant factor.
 /// </para>
 /// <para>
 /// This uses <see cref="System.Collections.Generic.SortedSet"/>, which is
@@ -178,6 +178,13 @@ internal sealed class UnsortedPriorityQueue<TKey, TValue>
 [InformalName("red-black tree")]
 internal sealed class SortedSetPriorityQueue<TKey, TValue>
         : IPriorityQueue<TKey, TValue> where TKey : notnull {
+    // TODO: Reimplement this to use a tree multiset (instead of a tree set, as
+    // it does now) to lift the strange reliance on TKey being totally ordered.
+    // .NET doesn't ship one, but one could be pulled in as a nuget dependency,
+    // implemented as a general-purpose sorted multiset elsewhere in this
+    // program, or (this might be best) implemented in a special-purpose way in
+    // this class, so _tree hands out node references for _map to map keys to.
+
     internal SortedSetPriorityQueue() : this(Comparer<TValue>.Default) { }
 
     internal SortedSetPriorityQueue(IComparer<TValue> comparer)
