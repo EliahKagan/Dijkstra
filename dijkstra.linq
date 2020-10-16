@@ -982,7 +982,7 @@ internal sealed class Controller {
         _pqConfig.Dump("Priority queues");
         _outputConfig.Dump("Output");
 
-        _buttons.Dump();
+        _triggerButtons.Dump();
     }
 
     internal event Action<Graph, int, Func<IPriorityQueue<int, long>>, string>?
@@ -1035,7 +1035,13 @@ internal sealed class Controller {
                                       _drawing);
 
         _run = new Button("Run", run_Click);
-        _buttons = new WrapPanel(_run, new Button("Clear", clear_Click));
+        var clear = new Button("Clear", clear_Click);
+        _triggerButtons = new WrapPanel(_run, clear);
+    }
+
+    private static void SetEnabled(IEnumerable<Control> controls, bool enabled)
+    {
+        foreach (var control in controls) control.Enabled = enabled;
     }
 
     private static string StripCommentsAndWhitespace(string line)
@@ -1069,13 +1075,11 @@ internal sealed class Controller {
     private void generatorDialog_Generating(object sender,
                                             GraphGeneratingEventArgs e)
     {
-        //_generatorDialog.Generated -= generatorDialog_Generated;
+        DisableSomeInteractionsBeforeGenerating();
 
         _order.Text = e.Order.ToString();
         ExplainEdgeDelay("Generating", e.Size);
         // TODO: What should source be set to, if anything?
-
-        MaybeDisableInputControls();
     }
 
     // TODO: Populating the edges can lag the UI. Would setting IsMultithreaded
@@ -1088,20 +1092,18 @@ internal sealed class Controller {
         Debug.Assert(e.Edges.Count == e.Size);
         ExplainEdgeDelay("Populating", e.Size);
 
-        //_generatorDialog.Generated += generatorDialog_Generated;
-
         // FIXME: DRY (Something like this is already elsewhere, right?)
         var lines = from edge in e.Edges
                     select $"{edge.Src} {edge.Dest} {edge.Weight}";
 
         _edges.Text = string.Join(Environment.NewLine, lines);
 
-        MaybeEnableInputControls();
+        EnableSomeInteractionsAfterGenerating();
     }
 
     private void run_Click(Button sender)
     {
-        MaybeDisableInputControls();
+        DisableSomeInteractionsBeforeRunning();
         try {
             // Fail fast on malformed graph input.
             var graph = BuildGraph();
@@ -1125,7 +1127,7 @@ internal sealed class Controller {
 
             runsCompleted?.Invoke();
         } finally {
-            MaybeEnableInputControls();
+            EnableSomeInteractionsAfterRunning();
         }
     }
 
@@ -1167,6 +1169,42 @@ internal sealed class Controller {
         _run.Enabled = AnyChecked(_pqConfig) && AnyChecked(_outputConfig);
     }
 
+    private void DisableSomeInteractionsBeforeGenerating()
+    {
+        if (Options.DisableInputWhileProcessing)
+            SetEnabled(InputControls, false);
+
+        _run.Enabled = false;
+    }
+
+    private void EnableSomeInteractionsAfterGenerating()
+    {
+        _run.Enabled = true;
+
+        if (Options.DisableInputWhileProcessing)
+            SetEnabled(InputControls, true);
+    }
+
+    private void DisableSomeInteractionsBeforeRunning()
+    {
+        if (Options.DisableInputWhileProcessing) {
+            _generatorDialog.Generated -= generatorDialog_Generated;
+            SetEnabled(InputControls, false);
+        }
+
+        SetEnabled(TriggerButtons, false);
+    }
+
+    private void EnableSomeInteractionsAfterRunning()
+    {
+        SetEnabled(TriggerButtons, true);
+
+        if (Options.DisableInputWhileProcessing) {
+            SetEnabled(InputControls, true);
+            _generatorDialog.Generated += generatorDialog_Generated;
+        }
+    }
+
     private Graph BuildGraph()
     {
         var graph = new Graph(ParseValue(_order));
@@ -1200,17 +1238,11 @@ internal sealed class Controller {
         => _edges.Text = (size == 1 ? $"{verb} 1 edge..."
                                     : $"{verb} {size} edges...");
 
-    private void MaybeDisableInputControls()
-    {
-        if (Options.DisableInputWhileProcessing)
-            foreach (var control in InputControls) control.Enabled = false;
-    }
+    private void DisableTriggerButtons()
+        => SetEnabled(_triggerButtons.Children, false);
 
-    private void MaybeEnableInputControls()
-    {
-        if (Options.DisableInputWhileProcessing)
-            foreach (var control in InputControls) control.Enabled = true;
-    }
+    private void EnableTriggerButtons()
+        => SetEnabled(_triggerButtons.Children, true);
 
     private IEnumerable<Control> InputControls
         => TextControls.Concat(CheckBoxes);
@@ -1225,9 +1257,10 @@ internal sealed class Controller {
     }
 
     private IEnumerable<CheckBox> CheckBoxes
-        => _pqConfig.Children
-            .Concat(_outputConfig.Children)
-            .Cast<CheckBox>();
+        => _pqConfig.Children.Concat(_outputConfig.Children).Cast<CheckBox>();
+
+    private IEnumerable<Button> TriggerButtons
+        => _triggerButtons.Children.Cast<Button>();
 
     private readonly GraphGeneratorDialog _generatorDialog =
         new GraphGeneratorDialog();
@@ -1257,7 +1290,7 @@ internal sealed class Controller {
 
     private readonly Button _run;
 
-    private readonly WrapPanel _buttons;
+    private readonly WrapPanel _triggerButtons;
 }
 
 private static Controller BuildController()
