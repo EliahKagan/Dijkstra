@@ -1189,6 +1189,10 @@ internal sealed class Controller {
                     .Select(StripCommentsAndWhitespace)
                     .Where(line => !string.IsNullOrWhiteSpace(line));
 
+    private void ExplainEdgeDelay(string verb, int size)
+        => _edges.Text = (size == 1 ? $"{verb} 1 edge..."
+                                    : $"{verb} {size} edges...");
+
     void MaybeDisableAllControls()
     {
         if (Options.DisableControlsWhileProcessing)
@@ -1216,10 +1220,6 @@ internal sealed class Controller {
         => _pqConfig.Children
             .Concat(_outputConfig.Children)
             .Cast<CheckBox>();
-
-    private void ExplainEdgeDelay(string verb, int size)
-        => _edges.Text = (size == 1 ? $"{verb} 1 edge..."
-                                    : $"{verb} {size} edges...");
 
     private readonly GraphGeneratorDialog _generatorDialog =
         new GraphGeneratorDialog();
