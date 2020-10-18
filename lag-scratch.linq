@@ -70,7 +70,34 @@ internal sealed class DumpTriggeredAction {
 internal sealed class DumpTriggeredAsyncAction {
     internal DumpTriggeredAsyncAction(Action action) => _action = action;
 
-    private object ToDump() => Task.Run(_action);
+    private object ToDump()
+    {
+        Thread.CurrentThread.ManagedThreadId.Dump("Thread ID entering await");
+
+        var task = Task.Run(() => {
+            Thread.CurrentThread.ManagedThreadId.Dump("Thread ID in task");
+            _action();
+        });
+
+        var continuation = task.ContinueWith(delegate {
+            Thread.CurrentThread.ManagedThreadId
+                .Dump("Thread ID in continuation");
+        });
+
+        async void ScheduleReports()
+        {
+            await task;
+            Thread.CurrentThread.ManagedThreadId
+                .Dump("Thread ID exiting first await");
+
+            await continuation;
+            Thread.CurrentThread.ManagedThreadId
+                .Dump("Thread ID exiting second await");
+        }
+
+        ScheduleReports();
+        return task;
+    }
 
     private readonly Action _action;
 }
@@ -113,7 +140,30 @@ internal static class Program {
         sender.Enabled = false;
         sender.Text = "Doing asynchronous thing directly...";
         try {
-            await Task.Run(DoThing);
+            Thread.CurrentThread.ManagedThreadId
+                .Dump("Thread ID entering await");
+
+            var task = Task.Run(() => {
+                Thread.CurrentThread.ManagedThreadId
+                    .Dump("Thread ID in task");
+
+                DoThing();
+            });
+
+            var continuation = task.ContinueWith(delegate {
+                Thread.CurrentThread.ManagedThreadId
+                    .Dump("Thread ID in continuation");
+            });
+
+            await task;
+
+            Thread.CurrentThread.ManagedThreadId
+                .Dump("Thread ID exiting first await");
+
+            await continuation;
+
+            Thread.CurrentThread.ManagedThreadId
+                .Dump("Thread ID exiting second await");
         } finally {
             sender.Text = "Redo Asynchronous Thing Directly";
             sender.Enabled = true;
