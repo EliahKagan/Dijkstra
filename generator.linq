@@ -458,6 +458,11 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     protected override void WndProc(ref WF.Message m)
     {
+        // Even when Msg is WM_SYSCOMMAND, it must usually be handled by the
+        // base-class WndProc, since WM_SYSCOMMAND is not just for extra items
+        // placed in the system menu, but the usual items, opening the system
+        // menu itself, using the close and minimize buttons, dragging the
+        // window via the title bar, and so forth.
         base.WndProc(ref m);
 
         if ((uint)m.Msg != WM_SYSCOMMAND) return;
