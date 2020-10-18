@@ -766,19 +766,13 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         StatusWaiting($"Generating {order} vertices, {size} edges");
         _cancel.Enabled = true;
         try {
-            Thread.CurrentThread.ManagedThreadId.Dump("Thread ID entering await");
-
             await Task.Run(() => {
                 Generating?.Invoke(this,
                                    new GraphGeneratingEventArgs(order, size));
 
-                Thread.CurrentThread.ManagedThreadId.Dump("Thread ID in task");
-
                 sinks(this, new GraphGeneratedEventArgs(order, size,
                                                         edges.ToList()));
             });
-
-            Thread.CurrentThread.ManagedThreadId.Dump("Thread ID exiting await");
         } finally {
             _cancel.Text = "Cancel";
             _cancel.Enabled = false;
