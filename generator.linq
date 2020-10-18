@@ -458,43 +458,39 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     protected override void WndProc(ref WF.Message m)
     {
-        // Even when Msg is WM_SYSCOMMAND, it must usually be handled by the
-        // base-class WndProc, since WM_SYSCOMMAND is not just for extra items
-        // placed in the system menu, but the usual items, opening the system
-        // menu itself, using the close and minimize buttons, dragging the
-        // window via the title bar, and so forth.
-        base.WndProc(ref m);
+        // If the message is WM_SYSCOMMAND *and* it is one of our system-menu
+        // customizations, handle it here rather than passing it upward.
+        if ((WindowMessage)m.Msg == WindowMessage.WM_SYSCOMMAND) {
+            switch ((MyMenuItemId)m.WParam) {
+            case MyMenuItemId.KeepOnTop:
+                ToggleTopMost();
+                return;
 
-        if ((uint)m.Msg != WM_SYSCOMMAND) return;
+            case MyMenuItemId.Translucent:
+                ToggleTranslucence();
+                return;
 
-        switch ((MyMenuItemId)m.WParam) {
-        case MyMenuItemId.KeepOnTop:
-            ToggleTopMost();
-            break;
+            case MyMenuItemId.StatusCaret:
+                ToggleStatusCaretPreference();
+                return;
 
-        case MyMenuItemId.Translucent:
-            ToggleTranslucence();
-            break;
+            case MyMenuItemId.CopyStatusToClipboard:
+                CopyStatus();
+                return;
 
-        case MyMenuItemId.StatusCaret:
-            ToggleStatusCaretPreference();
-            break;
-
-        case MyMenuItemId.CopyStatusToClipboard:
-            CopyStatus();
-            break;
-
-        default:
-            break; // Others are possible, but shouldn't be handled here.
+            default:
+                break; // Others are possible but shouldn't be handled here.
+            }
         }
+
+        // Otherwise, the message MUST be passed upward.
+        base.WndProc(ref m);
     }
 
     private const double FullOpacity = 1.0;
     private const double ActiveOpacity = 0.9;
     private const double InactiveOpacity = 0.8;
     private const double MovingOpacity = 0.6;
-
-    private const uint WM_SYSCOMMAND = 0x112;
 
     [Flags]
     private enum MenuFlags : uint {
@@ -512,6 +508,10 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         Translucent,
         StatusCaret,
         CopyStatusToClipboard,
+    }
+
+    private enum WindowMessage : uint {
+        WM_SYSCOMMAND = 0x112,
     }
 
     [DllImport("user32.dll")]
