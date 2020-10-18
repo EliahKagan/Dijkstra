@@ -458,14 +458,29 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
     protected override void WndProc(ref WF.Message m)
     {
-        switch ((uint)m.Msg) {
-        case WM_SYSCOMMAND:
-            DoSystemMenuAction((MyMenuItemId)m.WParam);
+        base.WndProc(ref m);
+
+        if ((uint)m.Msg != WM_SYSCOMMAND) return;
+
+        switch ((MyMenuItemId)m.WParam) {
+        case MyMenuItemId.KeepOnTop:
+            ToggleTopMost();
+            break;
+
+        case MyMenuItemId.Translucent:
+            ToggleTranslucence();
+            break;
+
+        case MyMenuItemId.StatusCaret:
+            ToggleStatusCaretPreference();
+            break;
+
+        case MyMenuItemId.CopyStatusToClipboard:
+            CopyStatus();
             break;
 
         default:
-            base.WndProc(ref m);
-            break;
+            break; // Others are possible, but shouldn't be handled here.
         }
     }
 
@@ -777,30 +792,6 @@ internal sealed class GraphGeneratorDialog : WF.Form {
 
         WF.MessageBox.Show(text: "Cancellation is not yet implemented. Sorry!",
                            caption: "Sorry!");
-    }
-
-    private void DoSystemMenuAction(MyMenuItemId id)
-    {
-        switch (id) {
-        case MyMenuItemId.KeepOnTop:
-            ToggleTopMost();
-            break;
-
-        case MyMenuItemId.Translucent:
-            ToggleTranslucence();
-            break;
-
-        case MyMenuItemId.StatusCaret:
-            ToggleStatusCaretPreference();
-            break;
-
-        case MyMenuItemId.CopyStatusToClipboard:
-            CopyStatus();
-            break;
-
-        default:
-            break; // Others are possible, but shouldn't be handled here.
-        }
     }
 
     private void SetToolTip(WF.Control control, string text)
