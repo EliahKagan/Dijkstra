@@ -729,7 +729,7 @@ internal sealed class Controller {
 
         // TODO: What should source be set to, if anything?
 
-        MaybeDisableAllControls();
+        MaybeDisableInputControls();
     }
 
     // TODO: Populating the edges can lag the UI. Would setting IsMultithreaded
@@ -753,7 +753,7 @@ internal sealed class Controller {
 
         _edges.Text = string.Join(Environment.NewLine, lines);
 
-        MaybeEnableAllControls();
+        MaybeEnableInputControls();
     }
 
     private void run_Click(Button sender)
