@@ -621,6 +621,15 @@ internal sealed class WrongQueue<TKey, TValue> : IPriorityQueue<TKey, TValue> {
                 + " which only pretends to take input");
 }
 
+/// <summary>
+/// Encapsulates a method that provides a priority queue suitable for
+/// and Prim's and Dijkstra's algorithm on a graph with integer weights.
+/// </summary>
+/// <remarks>
+/// See <see cref="IPriorityQueue"/> and <see cref="Graph"/>.
+/// </remarks>
+internal delegate IPriorityQueue<int, long> PQSupplier();
+
 /// <summary>Convenience functions for marked edges.</summary>
 internal static class MarkedEdge {
     internal static MarkedEdge<T> Create<T>(Edge edge, T mark)
@@ -679,8 +688,7 @@ internal sealed class Graph {
         _adj[src].Add((dest, weight));
     }
 
-    internal ParentsTree
-    ComputeShortestPaths(int start, Func<IPriorityQueue<int, long>> pqSupplier)
+    internal ParentsTree ComputeShortestPaths(int start, PQSupplier pqSupplier)
     {
         CheckVertex(nameof(start), start);
 
@@ -985,8 +993,8 @@ internal sealed class Controller {
         _triggerButtons.Dump();
     }
 
-    internal event Action<Graph, int, Func<IPriorityQueue<int, long>>, string>?
-    SingleRun;
+    // FIXME: define delegate naming: graph, source, supplier, label
+    internal event Action<Graph, int, PQSupplier, string>? SingleRun;
 
     internal event Action? RunsCompleted;
 
@@ -1065,7 +1073,7 @@ internal sealed class Controller {
             var supplier =
                 boundType.CreateSupplier<IPriorityQueue<int, long>>();
 
-            _pqSuppliers.Add(label, supplier);
+            _pqSuppliers.Add(label, new PQSupplier(supplier));
 
             var pqCheckBox = new CheckBox(label, pq.Selected, Configure);
             _pqConfig.Children.Add(pqCheckBox);
@@ -1275,8 +1283,8 @@ internal sealed class Controller {
 
     private readonly TextBox _source;
 
-    private readonly IDictionary<string, Func<IPriorityQueue<int, long>>>
-    _pqSuppliers = new Dictionary<string, Func<IPriorityQueue<int, long>>>();
+    private readonly IDictionary<string, PQSupplier> _pqSuppliers =
+        new Dictionary<string, PQSupplier>();
 
     private readonly WrapPanel _pqConfig = new WrapPanel();
 
