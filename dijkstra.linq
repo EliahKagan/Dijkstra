@@ -1149,9 +1149,11 @@ internal sealed class Controller {
         // yet. LINQPad will not dump more than a fixed amount of data. If the
         // contents are too long (which happens at about a million edges),
         // LINQPad outputs "<limit of graph>" and the controller is not fully
-        // drawn. If it were not for that problem, doing it this way would
-        // still have the benefit of avoiding unexplained lag when Clear is
-        // clicked.
+        // drawn. (The "graph" LINQPad is referring to is its dump graph, which
+        // is not conceptually related to the graphs on which this program runs
+        // Dijkstra's algorithm.) If it were not for that problem, doing it
+        // this way would still have the benefit of avoiding unexplained lag
+        // when Clear is clicked.
         _order.Text = order;
         ExplainEdgeDelay("Repopulating", EdgeStrings(edges).Count());
         _source.Text = source;
