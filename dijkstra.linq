@@ -1,5 +1,6 @@
 <Query Kind="Program">
   <Namespace>LINQPad.Controls</Namespace>
+  <Namespace>System.Threading.Tasks</Namespace>
 </Query>
 
 #load "./helpers.linq"
@@ -917,6 +918,22 @@ internal sealed class DotCode {
     private object ToDump() => new TextArea(Code, columns: 40);
 }
 
+internal class SingleRunEventArgs {
+    internal SingleRunEventArgs(Graph graph,
+                                int source,
+                                PQSupplier supplier,
+                                string label)
+        => (Graph, Source, Supplier, Label) = (graph, source, supplier, label);
+
+    internal Graph Graph { get; }
+    internal int Source { get; }
+    internal PQSupplier Supplier { get; }
+    internal string Label { get; }
+}
+
+internal delegate void SingleRunEventHandler(Controller sender,
+                                             SingleRunEventArgs e);
+
 /// <summary>UI to accept a graph description and trigger a run.</summary>
 internal sealed class Controller {
     internal sealed class Builder {
@@ -993,10 +1010,9 @@ internal sealed class Controller {
         _triggerButtons.Dump();
     }
 
-    // FIXME: define delegate naming: graph, source, supplier, label
-    internal event Action<Graph, int, PQSupplier, string>? SingleRun;
+    internal event SingleRunEventHandler? SingleRun;
 
-    internal event Action? RunsCompleted;
+    internal event EventHandler? RunsCompleted;
 
     internal bool ParentsTableOn => _parentsTable.Checked;
 
@@ -1109,7 +1125,7 @@ internal sealed class Controller {
         EnableSomeInteractionsAfterGenerating();
     }
 
-    private void run_Click(Button sender)
+    private async void run_Click(Button sender)
     {
         DisableSomeInteractionsBeforeRunning();
         try {
@@ -1121,19 +1137,45 @@ internal sealed class Controller {
             var singleRun = SingleRun;
             var runsCompleted = RunsCompleted;
 
-            _pqConfig.Children
-                     .Cast<CheckBox>()
-                     .Where(cb => cb.Checked)
-                     .Select(cb => cb.Text)
-                     .Select(text => (supplier: _pqSuppliers[text],
-                                      label: text))
-                     .ToList() // Never respond to config changes in mid-run.
-                     .ForEach(row => singleRun?.Invoke(graph,
-                                                       source,
-                                                       row.supplier,
-                                                       row.label));
+            // Store config and never respond to config changes in mid-run.
+            var pqs = _pqConfig.Children
+                               .Cast<CheckBox>()
+                               .Where(cb => cb.Checked)
+                               .Select(cb => cb.Text)
+                               .Select(text => (supplier: _pqSuppliers[text],
+                                                label: text))
+                               .ToList();
 
-            runsCompleted?.Invoke();
+            // FIXME: This awaiting shouldn't be implemented by Controller. The
+            // caller should do it, and then the caller and decide if and how
+            // to perform operations asynchronously, including whether to do
+            // them concurrently or not, and exceptions can be readily handled
+            // or automatically dumped by LINQPad). Possibly the caller should
+            // be responsible for telling the Controller when the runs are
+            // finished.
+            if (singleRun != null) {
+                foreach (var (supplier, label) in pqs) {
+                    var e = new SingleRunEventArgs(graph,
+                                                   source,
+                                                   supplier,
+                                                   label);
+                    var stopwatch = Stopwatch.StartNew();
+                    await Task.Run(() => singleRun(this, e));
+                    stopwatch.Stop();
+                    stopwatch.Elapsed.Dump($"elapsed time for {label}");
+                }
+            }
+
+            // FIXME: Likewise, this awaiting shouldn't be implemented by the
+            // Controller. The parts that need to be run asynchronously should
+            // be run asynchronously as specified by the caller.
+            if (runsCompleted != null) {
+                var stopwatch = Stopwatch.StartNew();
+                await Task.Run(() => runsCompleted.Invoke(this,
+                                                          EventArgs.Empty));
+                stopwatch.Stop();
+                stopwatch.Elapsed.Dump($"elapsed time for reporting");
+            }
         } finally {
             EnableSomeInteractionsAfterRunning();
         }
@@ -1367,14 +1409,12 @@ private static void Main()
            group result.label by result.parents into grp
            select (parents: grp.Key, labels: grp.ToList());
 
-    // TODO: Do the work asynchronously, primarily for responsiveness, but also
-    // so the computations on different priority queues are done in parallel.
-    controller.SingleRun += (graph, source, supplier, label) => {
-        var parents = graph.ComputeShortestPaths(source, supplier);
-        results.Add((label, parents));
+    controller.SingleRun += (sender, e) => {
+        var parents = e.Graph.ComputeShortestPaths(e.Source, e.Supplier);
+        results.Add((e.Label, parents));
     };
 
-    controller.RunsCompleted += () => {
+    controller.RunsCompleted += delegate {
         Util.RawHtml("<hr/>").Dump();
 
         var groups = GroupedResults().ToList();
