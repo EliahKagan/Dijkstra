@@ -21,12 +21,17 @@ internal sealed class SeparateWindow : WF.Form {
         _all.Controls.Add(_separateBuffer);
         Controls.Add(_all);
 
+        Shown += SeparateWindow_Shown;
         FormClosing += SeparateWindow_FormClosing;
 
         ResumeLayout();
     }
 
-    private void SeparateWindow_FormClosing(object? sender,
+    private void SeparateWindow_Shown(object? sender, EventArgs e)
+        => Text = "Separate Window, Thread "
+                    + Thread.CurrentThread.ManagedThreadId;
+
+    private void SeparateWindow_FormClosing(object sender,
                                             WF.FormClosingEventArgs e)
     {
         if (e.CloseReason == WF.CloseReason.UserClosing) {
@@ -139,6 +144,28 @@ internal static class Program {
 
     private static void Main()
     {
+        var dumpLinqPadUiThreadId =
+            new LC.Button(
+                "Dump LINQPad UI Thread ID",
+                delegate {
+                    Thread.CurrentThread.ManagedThreadId
+                        .Dump("LINQPad UI Thread ID");
+                });
+
+        var dumpThreadIdOfAMultithreadedControlsHandlerThread =
+            new LC.Button(
+                "Dump Thread ID of a Multithreaded Control's Handler Thread",
+                delegate {
+                    Thread.CurrentThread.ManagedThreadId
+                        .Dump("A multithreaded control's handler thread ID");
+                }) { IsMultithreaded = true };
+
+        var threadIdDumpers =
+            new LC.StackPanel(
+                    horizontal: true,
+                    dumpLinqPadUiThreadId,
+                    dumpThreadIdOfAMultithreadedControlsHandlerThread);
+
         var staticBuffer = new LC.TextArea();
 
         var dynamicBufferStats =
@@ -171,7 +198,9 @@ internal static class Program {
 
         var doSynchronousThingDirectly =
             new LC.Button("Do Synchronous Thing Directly",
-                          doSynchronousThingDirectly_Click);
+                          doSynchronousThingDirectly_Click) {
+                //IsMultithreaded = true
+            };
 
         var doSynchronousThingViaDump =
             new LC.Button("Do Synchronous Thing Via Dump",
@@ -185,15 +214,6 @@ internal static class Program {
             new LC.Button("Do Asynchronous Thing Via Dump",
                           doAsynchronousThingViaDump_Click);
 
-        var window = new SeparateWindow();
-
-        var openSeparateWindow =
-            new LC.Button("Open Separate Window", delegate { window.Show(); });
-
-        window.VisibleChanged += delegate {
-            openSeparateWindow.Enabled = !window.Visible;
-        };
-
         var triggerButtons =
             new LC.StackPanel(horizontal: true,
                               new LC.StackPanel(horizontal: false,
@@ -203,6 +223,51 @@ internal static class Program {
                                                 doAsynchronousThingDirectly,
                                                 doAsynchronousThingViaDump));
 
+        var sameThreadWindow = new SeparateWindow();
+
+        var openSeparateWindowThisThread =
+            new LC.Button("Open Separate Window, This Thread",
+                          delegate { sameThreadWindow.Show(); });
+
+        sameThreadWindow.VisibleChanged += delegate {
+            openSeparateWindowThisThread.Enabled = !sameThreadWindow.Visible;
+        };
+
+        var otherThreadWindow = new SeparateWindow();
+
+        var otherThread = new Thread(() =>
+            WF.Application.Run(otherThreadWindow));
+
+        otherThread.SetApartmentState(ApartmentState.STA);
+
+        var otherThreadLocker = new object();
+
+        var openSeparateWindowOtherThread =
+            new LC.Button("Open Separate Window, Other Thread", delegate {
+                lock (otherThreadLocker) {
+                    if (otherThread.ThreadState
+                            == System.Threading.ThreadState.Unstarted) {
+                        otherThread.Start();
+                        return;
+                    }
+                }
+
+                var invoker = new WF.MethodInvoker(otherThreadWindow.Show);
+                otherThreadWindow.BeginInvoke(invoker);
+            }) { IsMultithreaded = true };
+
+        otherThreadWindow.VisibleChanged += delegate {
+            openSeparateWindowOtherThread.Enabled =
+                !otherThreadWindow.Visible;
+        };
+
+        var separateWindowOpeners =
+            new LC.StackPanel(horizontal: true,
+                              openSeparateWindowThisThread,
+                              openSeparateWindowOtherThread);
+
+        threadIdDumpers.Dump();
+
         staticBuffer
             .Dump("See if you can type in here while a thing is being done.");
 
@@ -210,7 +275,7 @@ internal static class Program {
 
         triggerButtons.Dump("Try these...");
 
-        openSeparateWindow
+        separateWindowOpeners
             .Dump("Cool... but how is a separate window affected?");
 
         Util.RawHtml("<hr/>").Dump();
