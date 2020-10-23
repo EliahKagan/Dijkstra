@@ -1042,7 +1042,7 @@ internal sealed class Controller {
                                       _dotCode,
                                       _drawing);
 
-        _run = new Button("Run", run_Click) { IsMultithreaded = true };
+        _run = new Button("Run", run_Click);
         var clear = new Button("Clear", clear_Click);
         _triggerButtons = new WrapPanel(_run, clear);
     }
