@@ -1,5 +1,6 @@
 <Query Kind="Program">
   <Namespace>LINQPad.Controls</Namespace>
+  <Namespace>System.Threading.Tasks</Namespace>
 </Query>
 
 #load "./helpers.linq"
@@ -10,6 +11,13 @@ internal static class Options {
     internal static bool DisableInputWhileProcessing => true;
     internal static bool OfferWrongQueue => false;
     internal static bool DebugFibonacciHeap => false;
+    internal static bool ShowDividers => true;
+}
+
+/// <summary>Fully generic extensions for using fluent APIs.</summary>
+internal static class FluentExtensions {
+    internal static T If<T>(this T self, bool condition, Func<T, T> transform)
+        => condition ? transform(self) : self;
 }
 
 /// <summary>LINQ-style extension methods.</summary>
@@ -878,40 +886,45 @@ internal sealed class DotCode {
     internal string Code { get; }
 
     /// <summary>Runs <c>dot</c> to create a temporary SVG file.</summary>
-    internal object ToSvg()
+    internal async Task<object> ToSvgAsync()
     {
-        var dir = Path.GetTempPath();
-        var guid = Guid.NewGuid();
-        var dotPath = Path.Combine(dir, $"{guid}.dot");
-        var svgPath = Path.Combine(dir, $"{guid}.svg");
+        var process = new Process();
+        process.StartInfo.ArgumentList.Add("-Tsvg");
+        process.StartInfo.CreateNoWindow = true;
+        process.StartInfo.FileName = "dot";
+        process.StartInfo.RedirectStandardInput = true;
+        process.StartInfo.RedirectStandardOutput = true;
+        process.StartInfo.RedirectStandardError = true;
+        process.StartInfo.UseShellExecute = false;
 
-        using (var writer = File.CreateText(dotPath))
-            writer.Write(Code);
+        process.Start();
+        var stdin = process.StandardInput.WriteAsync(Code);
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        await stdin;
+        process.StandardInput.Close();
 
-        var proc = new Process();
+        // TODO: Do something better than this, or wait for .NET 5 and use
+        // https://docs.microsoft.com/en-us/dotnet/api/system.diagnostics.process.waitforexitasync?view=net-5.0
+        // See also https://stackoverflow.com/q/470256 and
+        // https://github.com/microsoft/vs-threading/blob/v16.8.50/src/Microsoft.VisualStudio.Threading/AwaitExtensions.cs#L61
+        // See also https://stackoverflow.com/q/470256, https://github.com/microsoft/vs-threading/blob/master/src/Microsoft.VisualStudio.Threading/AwaitExtensions.cs#L61
+        while (!process.HasExited)
+            await Task.Delay(TimeSpan.FromMilliseconds(100));
 
-        proc.StartInfo.ArgumentList.Add("-Tsvg");
-        proc.StartInfo.ArgumentList.Add("-o");
-        proc.StartInfo.ArgumentList.Add(svgPath);
-        proc.StartInfo.ArgumentList.Add(dotPath);
+        var output = await stdout;
+        var errors = (await stderr).TrimEnd();
 
-        proc.StartInfo.CreateNoWindow = true;
-        proc.StartInfo.FileName = "dot";
-        proc.StartInfo.RedirectStandardInput = false;
-        proc.StartInfo.RedirectStandardOutput = false;
-        proc.StartInfo.RedirectStandardError = true;
-        proc.StartInfo.UseShellExecute = false;
-
-        proc.Start();
-        // FIXME: Read standard error?
-        proc.WaitForExit();
-        // FIXME: Look at exit code?
+        if (process.ExitCode != 0)
+            process.ExitCode.Dump("WARNING: dot exited with nonzero status:");
 
         // TODO: Offer to run "dot -c" for the user, if dot fails and reports:
         //   Format: "svg" not recognized. Use one of:
         // (When this problem happens, usually that is the full message.)
+        if (errors.Length != 0)
+            errors.Dump("WARNING: dot wrote this to standard error:");
 
-        return Util.RawHtml(File.ReadAllText(svgPath));
+        return Util.RawHtml(output);
     }
 
     private object ToDump() => new TextArea(Code, columns: 40);
@@ -992,19 +1005,6 @@ internal sealed class Controller {
 
         _triggerButtons.Dump();
     }
-
-    // FIXME: define delegate naming: graph, source, supplier, label
-    internal event Action<Graph, int, PQSupplier, string>? SingleRun;
-
-    internal event Action? RunsCompleted;
-
-    internal bool ParentsTableOn => _parentsTable.Checked;
-
-    internal bool EdgeSelectionOn => _edgeSelection.Checked;
-
-    internal bool DotCodeOn => _dotCode.Checked;
-
-    internal bool DrawingOn => _drawing.Checked;
 
     private readonly struct PriorityQueueItem {
         internal PriorityQueueItem(Type type, bool selected)
@@ -1109,34 +1109,158 @@ internal sealed class Controller {
         EnableSomeInteractionsAfterGenerating();
     }
 
-    private void run_Click(Button sender)
+    private async void run_Click(Button sender)
     {
         DisableSomeInteractionsBeforeRunning();
         try {
+            // FIXME: With many edges, the UI lags even before this is printed.
+            // Much of the lag is thus from the UI itself, when there is a huge
+            // amount of text in the _edges textarea. Although the LINQPad UI
+            // runs on the same thread as tool windows, the LINQPad UI (unlike
+            // tool windows) can safely be interacted with from other threads,
+            // and running this entire event handler asynchronously (by setting
+            // _run.IsMultithreaded) eliminates the lag. I'm not sure why it
+            // does, since much of the work must need to be marshalled to the
+            // UI thread anyway; I'd guess the lag is due to the calling thread
+            // waiting on LINQPad itself, which is a separate process, rather
+            // than code in the query process involved in LINQPad controls. So
+            // I'll likely set _run.IsMultithreaded and do most things
+            // synchronously on the worker thread.
+            if (Options.ShowDividers) Util.RawHtml("<hr/>").Dump();
+
             // Fail fast on malformed graph input.
-            var graph = BuildGraph();
+            //
+            // FIXME: Separate the parts of BuildGraph that use the UI from
+            // those that don't. Do all the UI reads synchronously, then do
+            // just the processing asynchronously. (If this design is kept.)
+            var graph = await Task.Run(BuildGraph);
             var source = ParseValue(_source);
 
-            // Don't respond to handler changes while running.
-            var singleRun = SingleRun;
-            var runsCompleted = RunsCompleted;
+            var timedResults =
+                await ComputeTimedResultsAsync(graph,
+                                               source,
+                                               GetLabeledSuppliers());
 
-            _pqConfig.Children
-                     .Cast<CheckBox>()
-                     .Where(cb => cb.Checked)
-                     .Select(cb => cb.Text)
-                     .Select(text => (supplier: _pqSuppliers[text],
-                                      label: text))
-                     .ToList() // Never respond to config changes in mid-run.
-                     .ForEach(row => singleRun?.Invoke(graph,
-                                                       source,
-                                                       row.supplier,
-                                                       row.label));
+            ReportDurations(timedResults);
 
-            runsCompleted?.Invoke();
+            var results = timedResults.Select(lr => (lr.label, lr.parents));
+            await ReportResultsAsync(results);
         } finally {
             EnableSomeInteractionsAfterRunning();
         }
+    }
+
+    // FIXME: Move these methods (probably below the event handlers).
+    /// <summary>
+    /// Builds a list of priority-queue suppliers so that configuration changes
+    /// won't take effect for runs that have already been triggered.
+    /// </summary>
+    private IList<(string label, PQSupplier supplier)> GetLabeledSuppliers()
+        => _pqConfig.Children
+                    .Cast<CheckBox>()
+                    .Where(cb => cb.Checked)
+                    .Select(cb => cb.Text)
+                    .Select(text => (label: text,
+                                     supplier: _pqSuppliers[text]))
+                    .ToList();
+
+    // FIXME: Make a TimedResult type or something. This is too verbose!
+    private static async
+    Task<IList<(string label, ParentsTree parents, TimeSpan duration)>>
+    ComputeTimedResultsAsync(
+            Graph graph,
+            int source,
+            IList<(string label, PQSupplier supplier)> labeledSuppliers)
+    {
+        var count = labeledSuppliers.Count;
+        // FIXME: Shouldn't computed just be a List<Task<...>> ?
+        var computed = new (ParentsTree parents, TimeSpan duration)?[count];
+
+        // TODO: Support an option to start all tasks, then await them.
+        foreach (var i in Enumerable.Range(0, count)) {
+            var (label, supplier) = labeledSuppliers[i];
+
+            computed[i] = await Task.Run(() => {
+                var stopwatch = Stopwatch.StartNew();
+                var parents = graph.ComputeShortestPaths(source, supplier);
+                stopwatch.Stop();
+                return (parents, stopwatch.Elapsed);
+            });
+        }
+
+        var timedResults =
+            from row in labeledSuppliers.Zip(computed, (ls, res) => (ls, res))
+            let label = row.ls.label
+            let result = row.res ?? throw new NotSupportedException(
+                                        $"Bug: no result with {label}")
+            select (label, result.parents, result.duration);
+
+        return timedResults.ToList();
+    }
+
+    private static void ReportDurations(
+            IEnumerable<(string label, ParentsTree parents, TimeSpan duration)>
+            labeledResults)
+        => string.Join(
+                Environment.NewLine,
+                labeledResults.Select(
+                    lr => $"{lr.duration.Milliseconds} ms with a {lr.label}"))
+            .Dump("Dijkstra's algorithm took...");
+
+    private async Task ReportResultsAsync(
+            IEnumerable<(string label, ParentsTree parents)> results)
+    {
+        var groups = await Task.Run(() => GroupSameResults(results));
+
+        ReportConsistency(groups);
+
+        foreach (var (parents, labels) in groups)
+            await OutputResultAsync(parents, labels);
+    }
+
+    private static IList<(ParentsTree parents, IList<string> labels)>
+    GroupSameResults(IEnumerable<(string label, ParentsTree parents)> results)
+    {
+        var groups = from result in results
+                     group result.label by result.parents into grp
+                     select (parents: grp.Key,
+                             labels: (IList<string>)grp.ToList());
+
+        return groups.ToList();
+    }
+
+    private static void ReportConsistency(
+            IList<(ParentsTree parents, IList<string> labels)> groups)
+        => (groups.Count switch {
+                0 => "No results at all. BUG?",
+                1 when groups[0].labels.Count > 1
+                  => "YES, multiple results are consistent.",
+                1 => "Technically yes, but there is only one set of results.",
+                _ => "NO! Multiple results are inconsistent!"
+                        + Environment.NewLine
+                        + "(This is okay if there is more than one solution.)"
+             }).Dump("Same results with all data structures?");
+
+    private async Task
+    OutputResultAsync(ParentsTree parents, IList<string> labels)
+    {
+        void Display<T>(T content, string description)
+            => content.Dump(BuildDumpLabel(description, labels),
+                            noTotals: true);
+
+        if (_parentsTable.Checked) Display(parents, "Parents");
+
+        var selection = await Task.Run(() => parents.ToEdgeSelection());
+        if (_edgeSelection.Checked) Display(selection, "Edge selection");
+
+        // TODO: Keep track of the source vertex. Put it in the description.
+        const string description = "Full graph, shortest paths in red";
+
+        var dot = await Task.Run(() => selection.ToDotCode(description));
+        if (_dotCode.Checked) Display(dot, "DOT code");
+
+        if (_drawing.Checked)
+            Display(await dot.ToSvgAsync(), $"{description},");
     }
 
     /// <summary>
@@ -1303,9 +1427,26 @@ internal sealed class Controller {
     private readonly WrapPanel _triggerButtons;
 }
 
-private static Controller BuildController()
+private static string BuildDumpLabel(string description,
+                                     IEnumerable<string> pqLabels)
 {
-    var builder = new Controller.Builder()
+    const int indent = 4;
+    var margin = new string(' ', indent);
+
+    var builder = new StringBuilder($"{description} via:");
+
+    foreach (var label in pqLabels) {
+        builder.AppendLine()
+               .AppendLine() // Make extra vertical space for readability.
+               .Append(margin)
+               .Append(label.ToUpper());
+    }
+
+    return builder.ToString();
+}
+
+private static void Main()
+    => new Controller.Builder()
         .Order(7)
         .Edge(0, 1, 10)
         .Edge(0, 6, 15)
@@ -1330,86 +1471,8 @@ private static Controller BuildController()
         .PQ(typeof(UnsortedPriorityQueue<,>))
         .PQ(typeof(SortedSetPriorityQueue<,>))
         .PQ(typeof(BinaryHeap<,>))
-        .PQ(typeof(FibonacciHeap<,>));
-
-    if (Options.OfferWrongQueue)
-        builder.PQ(typeof(WrongQueue<,>), selected: false);
-
-    return builder.Build();
-}
-
-private static string BuildDumpLabel(string description,
-                                     IEnumerable<string> pqLabels)
-{
-    const int indent = 4;
-    var margin = new string(' ', indent);
-
-    var builder = new StringBuilder($"{description} via:");
-
-    foreach (var label in pqLabels) {
-        builder.AppendLine()
-               .AppendLine() // Make extra vertical space for readability.
-               .Append(margin)
-               .Append(label.ToUpper());
-    }
-
-    return builder.ToString();
-}
-
-private static void Main()
-{
-    var controller = BuildController();
-    var results = new List<(string label, ParentsTree parents)>();
-
-    IEnumerable<(ParentsTree parents, List<string> labels)>
-    GroupedResults()
-        => from result in results
-           group result.label by result.parents into grp
-           select (parents: grp.Key, labels: grp.ToList());
-
-    // TODO: Do the work asynchronously, primarily for responsiveness, but also
-    // so the computations on different priority queues are done in parallel.
-    controller.SingleRun += (graph, source, supplier, label) => {
-        var parents = graph.ComputeShortestPaths(source, supplier);
-        results.Add((label, parents));
-    };
-
-    controller.RunsCompleted += () => {
-        Util.RawHtml("<hr/>").Dump();
-
-        var groups = GroupedResults().ToList();
-
-        (groups.Count switch {
-            0 => "No results at all. BUG?",
-            1 when groups[0].labels.Count > 1
-              => "YES, multiple results are consistent.",
-            1 => "Technically yes, but there is only one set of results.",
-            _ => "NO! Multiple results are inconsistent!"
-                    + Environment.NewLine
-                    + "(This is okay if there is more than one solution.)"
-         }).Dump("Same results with all data structures?");
-
-        foreach (var (parents, labels) in groups) {
-            void Display<T>(T content, string description)
-                => content.Dump(BuildDumpLabel(description, labels),
-                                noTotals: true);
-
-            if (controller.ParentsTableOn) Display(parents, "Parents");
-
-            var selection = parents.ToEdgeSelection();
-            if (controller.EdgeSelectionOn)
-                Display(selection, "Edge selection");
-
-            const string description = "Full graph, shortest paths in red";
-
-            var dot = selection.ToDotCode(description);
-            if (controller.DotCodeOn) Display(dot, "DOT code");
-
-            if (controller.DrawingOn) Display(dot.ToSvg(), $"{description},");
-        }
-
-        results.Clear();
-    };
-
-    controller.Show();
-}
+        .PQ(typeof(FibonacciHeap<,>))
+        .If(Options.OfferWrongQueue,
+            b => b.PQ(typeof(WrongQueue<,>), selected: false))
+        .Build()
+        .Show();
