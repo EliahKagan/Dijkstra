@@ -906,7 +906,12 @@ internal sealed class DotCode {
         return Util.RawHtml(File.ReadAllText(svgPath));
     }
 
-    private object ToDump() => new TextArea(Code, columns: 40);
+    private object ToDump()
+    {
+        var box = new TextArea(Code.TrimEnd(), columns: 50);
+        box.Styles["font-family"] = "Consolas,Courier New";
+        return box;
+    }
 }
 
 /// <summary>UI to accept a graph description and trigger a run.</summary>
