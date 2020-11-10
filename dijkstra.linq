@@ -1024,8 +1024,13 @@ internal sealed class Controller {
                                delegate { _generatorDialog.DisplayDialog(); });
 
         _order = new TextBox(initialOrder, width: "60px");
-        _edges = new TextArea(initialEdges, columns: 50) { Rows = 20 };
+        _edges = new TextArea(initialEdges, columns: 50) { Rows = 22 };
         _source = new TextBox(initialSource, width: "60px");
+
+        foreach (var control in new Control[] { _order, _edges, _source }) {
+            control.Styles["font-family"] = "Consolas,Courier New";
+            control.Styles["font-size"] = "14px";
+        }
 
         PopulatePriorityQueueControls(priorityQueues);
 
