@@ -638,6 +638,21 @@ internal sealed class WrongQueue<TKey, TValue> : IPriorityQueue<TKey, TValue> {
 /// </remarks>
 internal delegate IPriorityQueue<int, long> PQSupplier();
 
+/// <summary>
+/// A priority queue supplier with an associated text description.
+/// </summary>
+internal sealed class LabeledPQSupplier { // TODO: In C# 9 use a record.
+    internal LabeledPQSupplier(string label, PQSupplier supplier)
+        => (Label, Supplier) = (label, supplier);
+
+    internal void Deconstruct(out string label, out PQSupplier supplier)
+        => (label, supplier) = (Label, Supplier);
+
+    internal string Label { get; }
+
+    internal PQSupplier Supplier { get; }
+}
+
 /// <summary>Convenience functions for marked edges.</summary>
 internal static class MarkedEdge {
     internal static MarkedEdge<T> Create<T>(Edge edge, T mark)
@@ -930,6 +945,30 @@ internal sealed class DotCode {
     private object ToDump() => new TextArea(Code, columns: 40);
 }
 
+/// <summary>
+/// A result of Dijkstra's algorithm with metadata about the computation.
+/// </summary>
+internal sealed class AnnotatedResult { // TODO: In C# 9 use a record.
+    internal AnnotatedResult(string label,
+                             int source,
+                             ParentsTree parents,
+                             TimeSpan duration)
+    {
+        Label = label;
+        Source = source;
+        Parents = parents;
+        Duration = duration;
+    }
+
+    internal string Label { get; }
+
+    internal int Source { get; }
+
+    internal ParentsTree Parents { get; }
+
+    internal TimeSpan Duration { get; }
+}
+
 /// <summary>UI to accept a graph description and trigger a run.</summary>
 internal sealed class Controller {
     internal sealed class Builder {
@@ -1136,14 +1175,11 @@ internal sealed class Controller {
             var graph = await Task.Run(BuildGraph);
             var source = ParseValue(_source);
 
-            var timedResults =
-                await ComputeTimedResultsAsync(graph,
-                                               source,
-                                               GetLabeledSuppliers());
+            var results = await ComputeResultsAsync(graph,
+                                                    source,
+                                                    GetLabeledSuppliers());
 
-            ReportDurations(timedResults);
-
-            var results = timedResults.Select(lr => (lr.label, lr.parents));
+            ReportDurations(results);
             await ReportResultsAsync(results);
         } finally {
             EnableSomeInteractionsAfterRunning();
@@ -1155,22 +1191,19 @@ internal sealed class Controller {
     /// Builds a list of priority-queue suppliers so that configuration changes
     /// won't take effect for runs that have already been triggered.
     /// </summary>
-    private IList<(string label, PQSupplier supplier)> GetLabeledSuppliers()
+    private IList<LabeledPQSupplier> GetLabeledSuppliers()
         => _pqConfig.Children
                     .Cast<CheckBox>()
                     .Where(cb => cb.Checked)
                     .Select(cb => cb.Text)
-                    .Select(text => (label: text,
-                                     supplier: _pqSuppliers[text]))
+                    .Select(text => new LabeledPQSupplier(text,
+                                                          _pqSuppliers[text]))
                     .ToList();
 
-    // FIXME: Make a TimedResult type or something. This is too verbose!
-    private static async
-    Task<IList<(string label, ParentsTree parents, TimeSpan duration)>>
-    ComputeTimedResultsAsync(
-            Graph graph,
-            int source,
-            IList<(string label, PQSupplier supplier)> labeledSuppliers)
+    private static async Task<IList<AnnotatedResult>>
+    ComputeResultsAsync(Graph graph,
+                        int source,
+                        IList<LabeledPQSupplier> labeledSuppliers)
     {
         var count = labeledSuppliers.Count;
         // FIXME: Shouldn't computed just be a List<Task<...>> ?
@@ -1190,24 +1223,25 @@ internal sealed class Controller {
 
         var timedResults =
             from row in labeledSuppliers.Zip(computed, (ls, res) => (ls, res))
-            let label = row.ls.label
+            let label = row.ls.Label
             let result = row.res ?? throw new NotSupportedException(
                                         $"Bug: no result with {label}")
-            select (label, result.parents, result.duration);
+            select new AnnotatedResult(label,
+                                       source,
+                                       result.parents,
+                                       result.duration);
 
         return timedResults.ToList();
     }
 
-    private static void ReportDurations(
-            IEnumerable<(string label, ParentsTree parents, TimeSpan duration)>
-            labeledResults)
-        => labeledResults.Select(lr => new {
-                Implementation = lr.label,
-                lr.duration.Milliseconds
+    // TODO: Control this via a "timings" checkbox, leftmost under "Output".
+    private static void ReportDurations(IEnumerable<AnnotatedResult> results)
+        => results.Select(lr => new {
+                Implementation = lr.Label,
+                lr.Duration.Milliseconds
             }).Dump("Dijkstra's algorithm took...", noTotals: true);
 
-    private async Task ReportResultsAsync(
-            IEnumerable<(string label, ParentsTree parents)> results)
+    private async Task ReportResultsAsync(IEnumerable<AnnotatedResult> results)
     {
         var groups = await Task.Run(() => GroupSameResults(results));
 
@@ -1218,10 +1252,10 @@ internal sealed class Controller {
     }
 
     private static IList<(ParentsTree parents, IList<string> labels)>
-    GroupSameResults(IEnumerable<(string label, ParentsTree parents)> results)
+    GroupSameResults(IEnumerable<AnnotatedResult> results)
     {
         var groups = from result in results
-                     group result.label by result.parents into grp
+                     group result.Label by result.Parents into grp
                      select (parents: grp.Key,
                              labels: (IList<string>)grp.ToList());
 
