@@ -1201,11 +1201,10 @@ internal sealed class Controller {
     private static void ReportDurations(
             IEnumerable<(string label, ParentsTree parents, TimeSpan duration)>
             labeledResults)
-        => string.Join(
-                Environment.NewLine,
-                labeledResults.Select(
-                    lr => $"{lr.duration.Milliseconds} ms with a {lr.label}"))
-            .Dump("Dijkstra's algorithm took...");
+        => labeledResults.Select(lr => new {
+                Implementation = lr.label,
+                lr.duration.Milliseconds
+            }).Dump("Dijkstra's algorithm took...", noTotals: true);
 
     private async Task ReportResultsAsync(
             IEnumerable<(string label, ParentsTree parents)> results)
