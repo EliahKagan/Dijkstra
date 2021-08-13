@@ -2,6 +2,19 @@
   <Namespace>LINQPad.Controls</Namespace>
 </Query>
 
+// Copyright (C) 2020 Eliah Kagan <degeneracypressure@gmail.com>
+//
+// Permission to use, copy, modify, and/or distribute this software for any
+// purpose with or without fee is hereby granted.
+//
+// THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+// WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+// SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+// WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+// OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+// CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
 #load "./helpers.linq"
 #load "./generator.linq"
 
@@ -621,6 +634,15 @@ internal sealed class WrongQueue<TKey, TValue> : IPriorityQueue<TKey, TValue> {
                 + " which only pretends to take input");
 }
 
+/// <summary>
+/// Encapsulates a method that provides a priority queue suitable for
+/// and Prim's and Dijkstra's algorithm on a graph with integer weights.
+/// </summary>
+/// <remarks>
+/// See <see cref="IPriorityQueue"/> and <see cref="Graph"/>.
+/// </remarks>
+internal delegate IPriorityQueue<int, long> PQSupplier();
+
 /// <summary>Convenience functions for marked edges.</summary>
 internal static class MarkedEdge {
     internal static MarkedEdge<T> Create<T>(Edge edge, T mark)
@@ -679,8 +701,7 @@ internal sealed class Graph {
         _adj[src].Add((dest, weight));
     }
 
-    internal ParentsTree
-    ComputeShortestPaths(int start, Func<IPriorityQueue<int, long>> pqSupplier)
+    internal ParentsTree ComputeShortestPaths(int start, PQSupplier pqSupplier)
     {
         CheckVertex(nameof(start), start);
 
@@ -990,8 +1011,8 @@ internal sealed class Controller {
         _triggerButtons.Dump();
     }
 
-    internal event Action<Graph, int, Func<IPriorityQueue<int, long>>, string>?
-    SingleRun;
+    // FIXME: define delegate naming: graph, source, supplier, label
+    internal event Action<Graph, int, PQSupplier, string>? SingleRun;
 
     internal event Action? RunsCompleted;
 
@@ -1044,7 +1065,7 @@ internal sealed class Controller {
                                       _dotCode,
                                       _drawing);
 
-        _run = new Button("Run", run_Click);
+        _run = new Button("Run", run_Click) { IsMultithreaded = true };
         var clear = new Button("Clear", clear_Click);
         _triggerButtons = new WrapPanel(_run, clear);
     }
@@ -1075,7 +1096,7 @@ internal sealed class Controller {
             var supplier =
                 boundType.CreateSupplier<IPriorityQueue<int, long>>();
 
-            _pqSuppliers.Add(label, supplier);
+            _pqSuppliers.Add(label, new PQSupplier(supplier));
 
             var pqCheckBox = new CheckBox(label, pq.Selected, Configure);
             _pqConfig.Children.Add(pqCheckBox);
@@ -1285,8 +1306,8 @@ internal sealed class Controller {
 
     private readonly TextBox _source;
 
-    private readonly IDictionary<string, Func<IPriorityQueue<int, long>>>
-    _pqSuppliers = new Dictionary<string, Func<IPriorityQueue<int, long>>>();
+    private readonly IDictionary<string, PQSupplier> _pqSuppliers =
+        new Dictionary<string, PQSupplier>();
 
     private readonly WrapPanel _pqConfig = new WrapPanel();
 
