@@ -968,7 +968,7 @@ internal sealed class GraphGeneratorDialog : WF.Form {
         }
     }
 
-    private void Warn(string message)
+    private static void Warn(string message)
         => message.Dump($"Warning ({nameof(GraphGeneratorDialog)})");
 
     private void RunOrBeginInvoke(EventHandler method)
