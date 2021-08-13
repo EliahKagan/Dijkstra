@@ -2,9 +2,22 @@
   <Namespace>LINQPad.Controls</Namespace>
 </Query>
 
+// Copyright (C) 2020 Eliah Kagan <degeneracypressure@gmail.com>
+//
+// Permission to use, copy, modify, and/or distribute this software for any
+// purpose with or without fee is hereby granted.
+//
+// THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+// WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+// SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+// WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+// OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+// CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
 /// <summary>Configuration options not exposed by the controller.</summary>
 internal static class Options {
-    internal static bool DisableControlsWhileProcessing => true;
+    internal static bool DisableInputWhileProcessing => true;
     internal static bool OfferWrongQueue => false;
     internal static bool DebugFibonacciHeap => false;
 }
@@ -118,11 +131,11 @@ internal interface IPriorityQueue<TKey, TValue> {
 /// A naive priority queue for Prim's and Dijkstra's algorithms.
 /// </summary>
 /// <remarks>O(1) insert/decrease. O(n) extract-min.</remarks>
-internal sealed class UnsortedArrayPriorityQueue<TKey, TValue>
+internal sealed class UnsortedPriorityQueue<TKey, TValue>
         : IPriorityQueue<TKey, TValue> where TKey : notnull {
-    internal UnsortedArrayPriorityQueue() : this(Comparer<TValue>.Default) { }
+    internal UnsortedPriorityQueue() : this(Comparer<TValue>.Default) { }
 
-    internal UnsortedArrayPriorityQueue(IComparer<TValue> comparer)
+    internal UnsortedPriorityQueue(IComparer<TValue> comparer)
         => _comparer = comparer;
 
     public int Count => _entries.Count;
@@ -978,7 +991,7 @@ internal sealed class Controller {
 
     private void run_Click(Button sender)
     {
-        MaybeDisableAllControls();
+        MaybeDisableInputControls();
         try {
             // Fail fast on malformed graph input.
             var graph = BuildGraph();
@@ -1002,7 +1015,7 @@ internal sealed class Controller {
 
             runsCompleted?.Invoke();
         } finally {
-            MaybeEnableAllControls();
+            MaybeEnableInputControls();
         }
     }
 
@@ -1061,19 +1074,20 @@ internal sealed class Controller {
                                 message: "wrong record length"))
                  .ToArray();
 
-    void MaybeDisableAllControls()
+    private void MaybeDisableInputControls()
     {
-        if (Options.DisableControlsWhileProcessing)
-            foreach (var control in Controls) control.Enabled = false;
+        if (Options.DisableInputWhileProcessing)
+            foreach (var control in InputControls) control.Enabled = false;
     }
 
-    void MaybeEnableAllControls()
+    private void MaybeEnableInputControls()
     {
-        if (Options.DisableControlsWhileProcessing)
-            foreach (var control in Controls) control.Enabled = true;
+        if (Options.DisableInputWhileProcessing)
+            foreach (var control in InputControls) control.Enabled = true;
     }
 
-    private IEnumerable<Control> Controls => TextControls.Concat(CheckBoxes);
+    private IEnumerable<Control> InputControls
+        => TextControls.Concat(CheckBoxes);
 
     private IEnumerable<Control> TextControls
     {
@@ -1139,7 +1153,7 @@ private static Controller BuildController()
         .Edge(6, 3, 68)
         .Edge(5, 5, 1)
         .Source(0)
-        .PQ(typeof(UnsortedArrayPriorityQueue<,>))
+        .PQ(typeof(UnsortedPriorityQueue<,>))
         .PQ(typeof(BinaryHeap<,>))
         .PQ(typeof(FibonacciHeap<,>));
 
