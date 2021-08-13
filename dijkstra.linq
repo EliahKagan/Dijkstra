@@ -54,7 +54,7 @@ internal static class EnumerableExtensions {
 }
 
 /// <summary>
-/// String parsing methods used in mutliple (conceptually unrealted) places.
+/// String parsing methods used in multiple (conceptually unrealted) places.
 /// </summary>
 internal static class StringExtensions {
     internal static string Before(this string text, char delimiter)
