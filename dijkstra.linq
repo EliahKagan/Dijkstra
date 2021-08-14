@@ -886,18 +886,27 @@ internal sealed class DotCode {
     /// <summary>Runs <c>dot</c> to create a temporary SVG file.</summary>
     internal object ToSvg()
     {
-        const string message =
-            "Can't convert DOT to SVG with the \"dot\" command."
-                + " Is GraphViz installed?";
+        static void Carp(Exception e, string suggestion)
+        {
+            var message =
+                "Can't convert DOT to SVG with the \"dot\" command."
+                    + suggestion;
 
-        try {
-            return DoToSvg();
-        } catch (Win32Exception e) {
             if (Thread.CurrentThread.IsThreadPoolThread)
                 e.Dump(message);
             else
                 "(See dumped exception below.)".Dump(message);
+        }
 
+        try {
+            return DoToSvg();
+        } catch (Win32Exception e) {
+            Carp(e, " Is GraphViz installed?");
+            throw;
+        } catch (FileNotFoundException e) {
+            Carp(e, Environment.NewLine + Environment.NewLine
+                        + "Do you need to run \"dot -c\"?"
+                        + " (This is only a guess.)");
             throw;
         }
     }
