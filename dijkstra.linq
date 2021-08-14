@@ -1,8 +1,9 @@
 <Query Kind="Program">
   <Namespace>LINQPad.Controls</Namespace>
+  <Namespace>System.ComponentModel</Namespace>
 </Query>
 
-// Copyright (C) 2020 Eliah Kagan <degeneracypressure@gmail.com>
+// Copyright (C) 2020, 2021 Eliah Kagan <degeneracypressure@gmail.com>
 //
 // Permission to use, copy, modify, and/or distribute this software for any
 // purpose with or without fee is hereby granted.
@@ -884,6 +885,24 @@ internal sealed class DotCode {
 
     /// <summary>Runs <c>dot</c> to create a temporary SVG file.</summary>
     internal object ToSvg()
+    {
+        const string message =
+            "Can't convert DOT to SVG with the \"dot\" command."
+                + " Is GraphViz installed?";
+
+        try {
+            return DoToSvg();
+        } catch (Win32Exception e) {
+            if (Thread.CurrentThread.IsThreadPoolThread)
+                e.Dump(message);
+            else
+                "(See dumped exception below.)".Dump(message);
+
+            throw;
+        }
+    }
+
+    private object DoToSvg()
     {
         var dir = Path.GetTempPath();
         var guid = Guid.NewGuid();
