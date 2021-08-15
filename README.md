@@ -59,15 +59,15 @@ non-obvious:
   that) sometimes opens in the background. This is a bug, which I haven&rsquo;t
   fully fixed yet.
 - It is not always immediately clear when you need to scroll down to see
-  results.
-- [Inconsistent results using different priority queues don&rsquo;t necessarily
-  mean there is a bug.](#a-note-on-consistency) The related bug, though, is that
-  the program&rsquo;s interface wrongly makes it seem like consistency should
-  always be expected.
+  results. This is an area where the UI might be improved.
+- Dijkstra&rsquo;s algorithm with different priority queues can produce
+  different results. This can happen when two or more different paths exist to
+  the same vertices with the same minimal cost. See [A note on
+  &ldquo;consistency&rdquo;](#a-note-on-consistency).
 
 ## Other Bugs
 
-The graph generator has very serious bug: its user interface is difficult to
+The graph generator has a very serious bug: its user interface is difficult to
 use, and sometimes entirely unusable, when [display
 scaling](https://support.microsoft.com/en-us/topic/make-text-and-apps-bigger-c3095a80-6edd-4779-9282-623c4d721d64)
 (of more than 100%) is used. This makes the graph generator unusable on most
@@ -488,11 +488,11 @@ edition), including the very instructive pseudocode therein.
 
 ### GraphViz authors
 
-&ldquo;Dijkstra&rdquo; is significantly less useful, and much less fun, without
-[GraphViz](https://graphviz.org/), whose `dot` command it uses to generate
-[graph drawings](#graph-drawing). My thanks go to the authors/contributors of
-GraphViz, as listed in the [Credits](https://graphviz.org/credits/) page on the
-GraphViz website.
+&ldquo;Dijkstra&rdquo; is significantly more useful, and much more fun, in the
+presence of [GraphViz](https://graphviz.org/), whose `dot` command it uses to
+generate [graph drawings](#graph-drawing). My thanks go to the
+authors/contributors of GraphViz, as listed in the
+[Credits](https://graphviz.org/credits/) page on the GraphViz website.
 
 ## Future Directions
 
