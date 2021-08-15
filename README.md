@@ -496,4 +496,115 @@ authors/contributors of GraphViz, as listed in the
 
 ## Future Directions
 
-<!-- FIXME: write this section -->
+See also [Other Bugs](#other-bugs) above.
+
+### Graph generator redesign
+
+At minimum, the accessibility bug where the graph generator dialog
+doesn&rsquo;t look right, and can even be utterly unusable, with > 100% display
+scaling, should be fixed before this program can be considered of beta or
+stable (rather than alpha) quality and before it should be recommended for
+widespread use.
+
+The basic layout is fine, but the implementation of that layout must be redone.
+A detailed prototype that could be turned into an improved version is present
+on the `graph-generator` branch, in the file `layout-scratch.linq`. Note that
+the graph generator implemented in `generator.linq` does not (yet) carry that
+modified design, even on that branch.
+
+(A more extensive redesign/reimplementation could perhaps be done later, to use
+a cross-platform toolkit rather than Windows Forms. This would lift one
+impediment to making &ldquo;Dijkstra&rdquo; cross-platform, though its
+dependency on LINQPad would still need to be addressed.)
+
+### More responsive user interface
+
+The interface sometimes becomes unresponsive for a short time when dealing with
+large graphs. This main cause seems to be the interaction between
+&ldquo;Dijkstra&rdquo; and LINQPad itself (since the program&rsquo;s graphical
+interface elements, except for the graph generator dialog, appear in the
+LINQPad results panel, and are thus actually rendered by LINQPad, via either
+the `WebBrowser` or `WebView2` control).
+
+**The main work I&rsquo;ve done to try and eliminate that lag is on the `async`
+branch.** I refactored much of the overall design of the code (though not most
+of the lower-level details) and also made some parts
+[asynchronous](https://docs.microsoft.com/en-us/dotnet/csharp/async). This
+produced some improvement, but there was still sometimes some lag.
+
+On that branch, I also added two other features:
+
+- Each run of Dijkstra&rsquo;s algorithm is benchmarked, and the time it took
+  to run is reported in a table that appears above any of the results.
+- The `dot` runner reports when `dot` exited indicating failure and show the full text written to the standard error stream.
+
+The first of these features is quite nice and should really always have been
+present. The second is less important but still handy. They are written in such
+a way as to depend on other changes to this branch, but they could be
+backported even if those other changes are not retained/used.
+
+**I will probably not use this asynchronous approach.** It didn&rsquo;t
+eliminate the lag, but a simpler approach did: making [the *Run*
+button](#run-the-computation) do all its work on a worker thread on the managed
+thread pool, instead of on the UI thread. Unlike the graph generator, all of
+the output (including any errors) from running Dijkstra&rsquo;s algorithm and
+reporting the results is being [marshaled across a process
+boundary](https://www.linqpad.net/HowLINQPadWorks.aspx) to LINQPad to be
+displayed, which is done in a thread-safe fashion.
+
+That approach is now on the `master` branch (as well as the `fonts` and
+`graph-generator` branches.) But I think the refactor itself in `async` may be
+worth keeping. I think the best approach for further work is to reexamine the
+code and decide if that is the case and, if so, to keep the overall design but
+convert the asynchronous methods to be ordinary synchronous methods instead, or
+otherwise rewrite them in such a way as not to create individual threads on the
+managed thread (no `Task.Run`). The `master` branch and `async` branch (or
+whatever branch implements these further changes&mdash;perhaps it will be
+called `sync`) could then be merged.
+
+Another consideration is that, since LINQPad 6.14.10, the results panel is often rendered with `WebView2`/Edge rather than `WebBrowser`/IE. It might be that there is less lag, in responsiveness with `WebView2` is used. Initial testing suggests this might be the case, but I am far from sure. If that is true, then it may or may not be worthwhile to fix the lag, depending on how many users have the WebView2 runtime. I am not sure if LINQPad ships and installs it at this point or not, but I believe Microsoft Edge will eventually supply it on all Windows 10 systems.
+
+There there disadvantages to making the *Run* button do its work on the managed
+thread pool, mainly that detailed error reporting is made more complicated. The
+`no-threadpool` branch does this work on the main thread (and synchronously).
+
+### Faster *Edges* textarea population
+
+LINQPad displays results in an embedded web browser: `WebBrowser`/IE or
+`WebView2`/Edge. When the graph generator populates the *Edges* textarea with
+edges for a very large graph, this takes a long time&mdash;far longer than
+actually generating them takes, even when the high quality PRNG option is
+turned on.
+
+Furthermore, interacting with the panel is slower after that, at least with
+`WebBrowser`/IE, and with enough edges, LINQPad refuses to redraw the interface
+when the *Clear* button (next to &ldquo;Run&rsquo; in the
+&ldquo;Dijkstra&rdquo;) is clicked. I haven&rsquo;t worked on this problem, but
+some redesign should probably be done to fix it.
+
+When `WebView2`/Edge is used, a mitigation&mdash;which would also be a feature
+improvement in other ways&mdash;may be to use a different text-box control.
+Perhaps Monaco (the editing control Visual Studio Code uses) could be used
+here.
+
+### Better fonts
+
+The contents of the *Order*, *Edges*, and *Source* input textareas&mdash;or at
+least *Edges*, is effectively code. The contents of the *DOT code* output
+textarea is literally code in the DOT language. So the stylistic case for these
+to be rendered in a monospaced font is fairly strong.
+
+The `fonts` branch has such a change, but I&rsquo;m not convinced it looks
+better, currently. The text also takes up more vertical space, which has the
+effect of making the UI slightly less pleasant and moderately less intuitive.
+
+### Bellman-Ford
+
+It would be nice to have a Bellman-Ford implementation for comparison.
+
+### Unit Tests
+
+I don&rsquo;t have unit tests for the priority queue implementations. This
+would be nice, especially for the Fibonacci heap, since that data structure is
+quite complicated and easy to get wrong. I don&rsquo;t think it has bugs that
+cause it to be incorrect. But not thinking it isn&rsquo;t enough.
