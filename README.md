@@ -47,10 +47,10 @@ This program is licensed under [0BSD](https://spdx.org/licenses/0BSD.html). See
    output will be easier to read if you arrange panels vertically
    (<kbd>Ctrl</kbd>+<kbd>F8</kbd> toggles this in LINQPad).
 
-See the tips below. You may also be interested in the [detailed usage
-guide](#usage-guide).
+See [Tips](#tips-known-bugs) and [Other Bugs](#other-bugs). You may also be
+interested in the [Usage Guide](#usage-guide).
 
-## Tips (a.k.a. bugs I haven&rsquo;t fixed)
+## Tips
 
 The program&rsquo;s interface is fairly intuitive, but a few things may be
 non-obvious:
@@ -61,9 +61,27 @@ non-obvious:
 - It is not always immediately clear when you need to scroll down to see
   results.
 - [Inconsistent results using different priority queues don&rsquo;t necessarily
-  mean there is a bug.](#a-note-on-consistency) (A related bug, though, is that
+  mean there is a bug.](#a-note-on-consistency) The related bug, though, is that
   the program&rsquo;s interface wrongly makes it seem like consistency should
-  always be expected.)
+  always be expected.
+
+## Other Bugs
+
+The graph generator has very serious bug: its user interface is difficult to
+use, and sometimes entirely unusable, when [display
+scaling](https://support.microsoft.com/en-us/topic/make-text-and-apps-bigger-c3095a80-6edd-4779-9282-623c4d721d64)
+(of more than 100%) is used. This makes the graph generator unusable on most
+ultra HD displays (where at least 200% display scaling is common). This would
+also be a serious accessibility problem for many users of screens of any
+resolution.
+
+The output would be much more interesting if it included timings for
+Dijkstra&rsquo;s algorithm from each data structure. Troubleshooting `dot`,
+especially in corner cases, would be easier if full error output from `dot`
+were shown. These two features are implemented on an experimental branch, but
+would need need to be backported.
+
+See [Future Directions](#future-directions).
 
 ## Goals
 
@@ -81,11 +99,15 @@ with edges pointing out from parents instead of into them (i.e., it is the
 transpose of that tree). This is an illuminating and&mdash;in my opinion&mdash;
 pleasing way to view the paths, at least if the graph is not too big.
 
+See [Graph drawing](#graph-drawing).
+
 ### Demonstration of various priority queues
 
 Besides [looking cool](#pretty-pictures), the main point of this program is to
 demonstrate how Dijkstra&rsquo;s algorithm can be understood as a class of
 algorithms parameterized by the choice of priority queue data structure.
+
+See [Reading the Code](#reading-the-code) below.
 
 ## Reading the Code
 
@@ -98,11 +120,15 @@ must implement the `IPriorityQueue` interface.
 
 The priority queue implementations that are available for selection are:
 
-- `UnsortedPriorityQueue`, a naive priority queue
-- `SortedSetPriorityQueue`, a red-black tree (currently implemented via
-  `System.Collections.Generic.TreeSet`)
-- `BinaryHeap`, a binary minheap + map data structure
-- `FibonacciHeap`, a Fibonacci heap + map data structure
+- [`UnsortedPriorityQueue`](#unsorted-priority-queue), a naive priority queue
+- [`SortedSetPriorityQueue`](#red-black-tree), a [red-black
+  tree](https://en.wikipedia.org/wiki/Red-black_tree) (currently implemented
+  via
+  [`System.Collections.Generic.SortedSet`](https://docs.microsoft.com/en-us/dotnet/api/system.collections.generic.sortedset-1?view=netcore-3.1))
+- [`BinaryHeap`](#binary-heap), a [binary
+  minheap](https://en.wikipedia.org/wiki/Binary_heap) + map data structure
+- [`FibonacciHeap`](#fibonacci-heap), a [Fibonacci
+  heap](https://en.wikipedia.org/wiki/Fibonacci_heap) + map data structure
 
 See [Choose your priority queue data
 structure](#Choose-your-priority-queue-data-structure) below for further
@@ -131,8 +157,9 @@ your own:
    as a three integers, separated by spaces. The first two integers are the
    source and destination vertices, and the third is the weight. All weights
    must be nonnegative. (Unlike some other algorithms&mdash;particularly
-   Bellman-Ford&mdash;Dijkstra&rdquo;s algorithm doesn&rsquo;t support negative
-   edge weights, even if there are no negative cycles.)
+   [Bellman-Ford](https://en.wikipedia.org/wiki/Bellman%E2%80%93Ford_algorithm)&mdash;Dijkstra&rsquo;s
+   algorithm doesn&rsquo;t support negative edge weights, even if there are no
+   negative cycles.)
 
 A third option is to randomly generate a graph.
 
@@ -180,7 +207,11 @@ running times for the most relevant operations, are:
 #### Unsorted priority queue
 
 This is a naive priority queue + map implementation. It uses a hash table to
-store vertex-cost mappings. Runtimes are:
+store vertex-cost mappings. Except that it uses as hash table rather than an
+array, it is the [priority-queue
+analogue](https://en.wikipedia.org/wiki/Priority_queue#Equivalence_of_priority_queues_and_sorting_algorithms)
+of [selection sort](https://en.wikipedia.org/wiki/Selection_sort). Runtimes
+are:
 
 - *O(1)* insert (&ldquo;push&rdquo;) and decrease-key.
 - *O(V)* extract-min (&ldquo;pop&rdquo;).
@@ -192,8 +223,9 @@ E)***. Assuming no (or few) parallel edges, this is *O(V<sup>2</sup>)*.
 If the graph is also dense, then this is *O(E)* and such a data structure can
 be reasonable from a performance perspective, though this implementation has
 unnecessarily large constants, which I think is because it uses a hash table
-implemented using linked structures (`System.Collections.Generic.Dictionary`).
-I implemented this priority queue&mdash;and the others&mdash; generically,
+implemented using linked structures
+([`System.Collections.Generic.Dictionary`](https://docs.microsoft.com/en-us/dotnet/api/system.collections.generic.dictionary-2?view=netcore-3.1)).
+I implemented this priority queue&mdash;and the others&mdash;generically,
 accepting keys of arbitrary type, even though this program only uses integers
 in a contiguous range starting from a zero. That restriction can be leveraged
 to implement a straightforward array-based flat-map that should perform better.
@@ -203,18 +235,24 @@ small, in which case the asymptotic runtime is unimportant).
 
 #### Red-black tree
 
-This is a self-balancing binary search tree. Currently it is implemented in
-terms of `System.Collections.Generic.SortedSet`, but it should really use a
-tree *multi*set instead. Since `SortedSet` is not a multiset, my comparator
-breaks ties based on the vertex numbers. This works fine, but it&rsquo;s
-inelegant. (It also may affect the results, though not in a way that makes them
-wrong. See [A note on &ldquo;consistency&rdquo;](#a-note-on-consistency)
-below.)
+This is a [self-balancing binary search
+tree](https://en.wikipedia.org/wiki/Self-balancing_binary_search_tree).
+Currently it is implemented in terms of
+[`System.Collections.Generic.SortedSet`](https://docs.microsoft.com/en-us/dotnet/api/system.collections.generic.sortedset-1?view=netcore-3.1),
+but it should really use a tree *multi*set instead. Since `SortedSet` is not a
+multiset, my comparator breaks ties based on the vertex numbers. This works
+fine, but it&rsquo;s inelegant. (It also may affect the results, though not in
+a way that makes them wrong. See [A note on
+&ldquo;consistency&rdquo;](#a-note-on-consistency) below.)
 
-`SortedSet` is a red-black tree. When I move to using a multiset, I&rsquo;ll
-probably continue using a red-black tree, but I might use an AVL tree, splay
-tree, or some other self-balancing binary search tree. This does not affect
-asymptotic worst-cast runtimes.
+`SortedSet` [is
+implemented](https://source.dot.net/#System.Collections/System/Collections/Generic/SortedSet.cs,11)
+as a [red-black tree](https://en.wikipedia.org/wiki/Red%E2%80%93black_tree).
+When I move to using a multiset, I&rsquo;ll probably continue using a red-black
+tree, but I might use an [AVL tree](https://en.wikipedia.org/wiki/AVL_tree),
+[splay tree](https://en.wikipedia.org/wiki/Splay_tree), or some other
+self-balancing binary search tree; the name of this option in the UI would then
+change accordingly. None of this affects asymptotic worst-case runtimes.
 
 Runtimes are:
 
@@ -241,7 +279,9 @@ Dijsktra&rsquo;s algorithm (as well as for Prim&rsquo;s algorithm), because:
   are larger and a binary heap tends to perform better except for large dense
   graphs.
 - Compared to a [self-balancing BST](#red-black-tree), it has the same
-  asymptotic runtime, but because traversals and rotations have large
+  asymptotic runtime, but because
+  [traversals](https://en.wikipedia.org/wiki/Tree_traversal) and
+  [rotations](https://en.wikipedia.org/wiki/Tree_rotation) have large
   constants, the binary minheap&mdash;which is implemented using an array even
   though conceptually it has a tree structure&mdash;is faster.
 
@@ -265,7 +305,8 @@ be written as *O(V<sup>2</sup> log V)*. If the graph is very sparse, it&rsquo;s
 This is a [Fibonacci minheap](https://en.wikipedia.org/wiki/Fibonacci_heap) +
 map data structure. It provides the best known asymptotic runtime of any data
 structure for Dijkstra&rsquo;s algorithm (and the related Prim&rsquo;s
-algorithm) in the general case, and the least uncommonly implemented of several data structures with that asymptotic complexity.
+algorithm) in the general case. It is the least uncommonly implemented of
+several data structures with that asymptotic complexity.
 
 - Compared to a [binary heap](#binary-heap), the Fibonacci heap has better
   asymptotic runtime, but that is a simple data structure that, even though it
@@ -295,13 +336,14 @@ as *O(E)* or as *O(V<sup>2</sup>)*. If the graph is very sparse, it&rsquo;s
 *O(V log V)*.
 
 The asymptotic runtime of the Fibonacci heap is thus always at least as good as
-both an unsorted priority queue and a binary heap even for the specific cases
-where they work best (so it is strictly better than either in the general
-case), though its large constants often make it an inferior choice in practice.
+both an unsorted priority queue and a binary heap, even for the specific cases
+where each of those works best. So it is strictly better than either in the
+general case, asymptotically speaking. But its large constants often make it an
+inferior choice in practice.
 
-### Choose your form(s) output
+### Choose your form(s) of output
 
-By default, &ldquo;Dikstra&rdquo; shows output as a &ldquo;graph
+By default, &ldquo;Dijkstra&rdquo; shows output as a &ldquo;graph
 drawing,&rdquo; though a few other forms of output are available. They are
 controlled by the checkboxes under *Output*. Any combination may be chosen,
 though if you uncheck all of them then the program assumes this is a mistake
@@ -338,18 +380,74 @@ applications.
 
 #### DOT code
 
-<!-- FIXME: write this part -->
+This is [DOT code](https://graphviz.org/doc/info/lang.html) describing a graph
+on which the tree of all shortest paths from the source will be shown with its
+edges in red. That is, this is a machine-readable (and fairly human-readable)
+description of the graph that [graph drawing](#graph-drawing) actually draws.
 
-### Graph drawing
+This does not include geometric information about where or how vertices, edges,
+and their labels should be drawn. GraphViz&rsquo;s `dot` command generates that
+automatically from this. (It&rsquo;s possible to include such information in
+DOT code, but &ldquo;Dijkstra&rdquo; doesn&rsquo;t and wouldn&rsquo;t benefit
+from doing so.)
 
-<!-- FIXME: write this part -->
+#### Graph drawing
+
+This draws the graph, with edges of the tree of all least-cost paths from the
+source vertex to all other reachable vertices colored red to distinguish them
+(from other edges, colored black).
+
+[As mentioned above](#pretty-pictures), this least-cost paths tree is
+effectively what Dijkstra&rsquo;s algorithm emits&mdash;though it really emits
+a parents tree, which the least-cost paths tree transposes.
+
+The image is generated as an SVG and dumped into the results panel. It is
+created by feeding [generated DOT code](#dot-code) to the `dot` command. That
+command is part of GraphViz. It is not necessary to enable *DOT code* output;
+if the checkbox for DOT code is unchecked, it will still be generated behind
+the scenes to produce the graph drawing.
+
+For graphs with hundreds of vertices and thousands of edges, the resulting
+image may take up a lot of visual space. For even larger graphs, `dot` may take
+a very long time to run. So you might decide to uncheck *Graph drawing* in such
+cases. The work done by `dot` to lay out a graph is, by far, the most
+computationally intensive part of &ldquo;Dijkstra&rdquo;&rsquo;s functionality.
+([Future Directions](#future-directions) mentions a possible way graph-drawing
+performing might be improved in a later version.)
+
+### Run the computation
+
+&ldquo;Dijkstra&rdquo;&rsquo;s interface has *Run* and *Clear* buttons under
+where you specify the graph and make priority queue and output choices.
+
+Click *Run* to run Dijkstra&rsquo;s algorithm on the input. This is done
+separately with each kind of priority queue selected. Identical results are
+grouped together and all groups are shown. Usually there is just one group;
+that is, usually Dijkstra&rsquo;s algorithm finds the same shortest paths with
+any pf the priority queue data structures implemented in this program. [But
+sometimes the results are different.](#a-note-on-consistency)
+
+If you attempt to generate a [graph drawing](#graph-drawing) showing the result
+of Dijkstra&rsquo;s algorithm on a graph with thousands of edges or more, it
+may take some time. &ldquo;Dijkstra&rdquo; doesn&rsquo;t currently support
+cancellation, but you can terminate the `dot` process (`dot.exe` in the Task
+Manager).
+
+The *Run* button that is part of &ldquo;Dijkstra&rdquo;&rsquo;s interface
+should **not** be confused with the &#9654; (&ldquo;Run&rdquo; / <kbd>F5</kbd>)
+button that is part of LINQPad&rsquo;s own interface and is used to run or
+re-run queries.
+
+Clicking *Clear* clears the output and keeps (technically, redraws) your graph
+description, source vertex choice, and choices of priority queues and forms of
+output.
 
 ## A note on &ldquo;consistency&rdquo;
 
 Most of the time, the results will be the same with all priority queues. But
 this is not guaranteed&mdash;many graphs have more than one choice of shortest
 path from a source vertex to one or more destination vertices. So if the
-results are reported as not being &ldquo;consistent&rdquo;, that doesn&rsquo;t
+results are reported as not being &ldquo;consistent,&rdquo; that doesn&rsquo;t
 necessarily mean there is a bug or other problem.
 
 If you want to *deliberately* try and create a situation where different
@@ -377,7 +475,24 @@ that of course does *not* ensure my implementations are bug-free.
 
 ## Acknowledgements
 
-<!-- FIXME: write this section -->
+### CLRS authors
+
+I&rsquo;d like to thank Thomas H. Cormen, Charles E. Leiserson, Ronald L.
+Rivest, and Clifford Stein. Although [the code](#reading-the-code) of the
+[Fibonacci heap](#fibonacci-heap) implementation in this program is not copied
+or directly translated from any preexisting code, it is nonetheless strongly
+informed by, and to some extent based on, the description of Fibonacci heaps in
+Chapter 19 of their famous book *[Introduction to
+Algorithms](https://en.wikipedia.org/wiki/Introduction_to_Algorithms)* (3rd
+edition), including the very instructive pseudocode therein.
+
+### GraphViz authors
+
+&ldquo;Dijkstra&rdquo; is significantly less useful, and much less fun, without
+[GraphViz](https://graphviz.org/), whose `dot` command it uses to generate
+[graph drawings](#graph-drawing). My thanks go to the authors/contributors of
+GraphViz, as listed in the [Credits](https://graphviz.org/credits/) page on the
+GraphViz website.
 
 ## Future Directions
 
