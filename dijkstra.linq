@@ -18,6 +18,8 @@
 #load "./helpers.linq"
 #load "./generator.linq"
 
+#nullable enable
+
 /// <summary>Configuration options not exposed by the controller.</summary>
 internal static class Options {
     internal static bool DisableInputWhileProcessing => true;

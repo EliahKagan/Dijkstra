@@ -24,6 +24,8 @@
 
 #load "./helpers.linq"
 
+#nullable enable
+
 /// <summary>Extensions for clearer and more compact regex usage.</summary>
 internal static class MatchExtensions {
     internal static string Group(this Match match, int index)

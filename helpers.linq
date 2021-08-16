@@ -13,6 +13,8 @@
 // OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
 // CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
+#nullable enable
+
 /// <summary>An edge in a weighted directed graph.</summary>
 internal readonly struct Edge {
     internal Edge(int src, int dest, int weight)
