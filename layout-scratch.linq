@@ -16,6 +16,8 @@
 // OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
 // CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
+#nullable enable
+
 internal sealed class LayoutExperiment : Form {
     internal LayoutExperiment()
     {

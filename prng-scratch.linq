@@ -19,6 +19,8 @@
 #load "./helpers.linq"
 #load "./generator.linq"
 
+#nullable enable
+
 private static void RunDistinct(LongRandom prng, ulong n, int k)
 {
     var sampler = new DistinctSampler(prng, n);
