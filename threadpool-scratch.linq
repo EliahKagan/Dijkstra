@@ -15,6 +15,8 @@
 // OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
 // CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
+#nullable enable
+
 var go = new Button("Go!", sender => new {
         sender.IsMultithreaded,
         Thread.CurrentThread.ManagedThreadId,

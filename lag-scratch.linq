@@ -18,6 +18,8 @@
 // OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
 // CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
+#nullable enable
+
 internal sealed class SeparateWindow : WF.Form {
     internal SeparateWindow()
     {
@@ -44,7 +46,7 @@ internal sealed class SeparateWindow : WF.Form {
         => Text = "Separate Window, Thread "
                     + Thread.CurrentThread.ManagedThreadId;
 
-    private void SeparateWindow_FormClosing(object sender,
+    private void SeparateWindow_FormClosing(object? sender,
                                             WF.FormClosingEventArgs e)
     {
         if (e.CloseReason == WF.CloseReason.UserClosing) {
