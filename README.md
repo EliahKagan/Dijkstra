@@ -49,8 +49,8 @@ in LINQPad.
    output will be easier to read if you arrange panels vertically
    (<kbd>Ctrl</kbd>+<kbd>F8</kbd> toggles this in LINQPad).
 
-See [Tips](#tips-known-bugs) and [Other Bugs](#other-bugs). You may also be
-interested in the [Usage Guide](#usage-guide).
+See [Tips](#tips) and [Other Bugs](#other-bugs). You may also be interested in
+the [Usage Guide](#usage-guide).
 
 ## Tips
 
@@ -119,7 +119,7 @@ horizontally).
 Dijkstra&rsquo;s algorithm is implemented in `Graph.ComputeShortestPaths`. It
 uses a priority queue supplied via dependency injection. The priority queue
 must implement an interface, `IPriorityQueue`, which exposes priority queue
-operations useful for implementing Dijsktra&rsquo;s algorithm.
+operations useful for implementing Dijkstra&rsquo;s algorithm.
 
 The priority queue implementations that are available for selection are:
 
@@ -134,7 +134,7 @@ The priority queue implementations that are available for selection are:
   heap](https://en.wikipedia.org/wiki/Fibonacci_heap) + map data structure
 
 See [Choose your priority queue data
-structure](#Choose-your-priority-queue-data-structure) below for further
+structure(s)](#Choose-your-priority-queue-data-structures) below for further
 algorithmic details.
 
 &ldquo;Dijkstra&rdquo; is currently split into three C# query files, named with
@@ -275,7 +275,7 @@ be written as *O(V<sup>2</sup> log V)*. If the graph is very sparse, it&rsquo;s
 
 This is a [binary minheap](https://en.wikipedia.org/wiki/Binary_heap) + map
 data structure. It is the most commonly used data structure for
-Dijsktra&rsquo;s algorithm (as well as for Prim&rsquo;s algorithm), because:
+Dijkstra&rsquo;s algorithm (as well as for Prim&rsquo;s algorithm), because:
 
 - Compared to a [Fibonacci heap](#fibonacci-heap), it has worse asymptotic
   runtime, but that is a complicated linked data structure, so its constants
@@ -593,9 +593,9 @@ eliminate the lag, but a simpler approach did: making [the *Run*
 button](#run-the-computation) do all its work on a worker thread on the managed
 thread pool, instead of on the UI thread. Unlike the graph generator, which
 uses [Windows Forms](https://en.wikipedia.org/wiki/Windows_Forms) and must make
-all UI changes on the UI thread, all of the output (including any errors) from
-running Dijkstra&rsquo;s algorithm and reporting the results is being
-[marshaled across a process
+any changes shown in its own UI on the UI thread, all of the output (including
+any errors) from running Dijkstra&rsquo;s algorithm and reporting the results
+is being [marshaled across a process
 boundary](https://www.linqpad.net/HowLINQPadWorks.aspx) to LINQPad to be
 displayed, which is done in a thread-safe fashion.
 
