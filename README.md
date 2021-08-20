@@ -28,6 +28,8 @@ pairs, and several forms of output to report the results, including one that
 uses the [GraphViz](https://graphviz.org/) `dot` command to draw the graph in a
 manner that reveals the paths.
 
+See also [msf](https://github.com/EliahKagan/msf).
+
 ## License
 
 This program is licensed under [0BSD](https://spdx.org/licenses/0BSD.html). See
