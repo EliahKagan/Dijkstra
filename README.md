@@ -316,8 +316,8 @@ complexity.
 
 - Compared to a [binary heap](#binary-heap), the Fibonacci heap has better
   asymptotic runtime. But the binary minheap is a much simpler data structure
-  that, even though it is conceptually a tree, can (and in practice always is)
-  implemented as a flat array. So its constants are smaller and it tends to
+  that, even though it is conceptually a tree, can be (and in practice always
+  is) implemented as a flat array. So its constants are smaller and it tends to
   perform better than a Fibonacci heap except for large dense graphs.
 - The Fibonacci heap&rsquo;s runtime [is matched
   by](https://en.wikipedia.org/wiki/Heap_(data_structure)#Comparison_of_theoretic_bounds_for_variants)
