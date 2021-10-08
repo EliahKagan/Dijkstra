@@ -1289,6 +1289,24 @@ internal sealed class Controller {
                         + "(This is okay if there is more than one solution.)"
              }).Dump("Same results with all data structures?");
 
+    private static string BuildDumpLabel(string description,
+                                         IEnumerable<string> pqLabels)
+    {
+        const int indent = 4;
+        var margin = new string(' ', indent);
+
+        var builder = new StringBuilder($"{description} via:");
+
+        foreach (var label in pqLabels) {
+            builder.AppendLine()
+                   .AppendLine() // Make extra vertical space for readability.
+                   .Append(margin)
+                   .Append(label.ToUpper());
+        }
+
+        return builder.ToString();
+    }
+
     private async Task
     OutputResultAsync(ParentsTree parents, IList<string> labels)
     {
@@ -1473,24 +1491,6 @@ internal sealed class Controller {
     private readonly Button _run;
 
     private readonly WrapPanel _triggerButtons;
-}
-
-private static string BuildDumpLabel(string description,
-                                     IEnumerable<string> pqLabels)
-{
-    const int indent = 4;
-    var margin = new string(' ', indent);
-
-    var builder = new StringBuilder($"{description} via:");
-
-    foreach (var label in pqLabels) {
-        builder.AppendLine()
-               .AppendLine() // Make extra vertical space for readability.
-               .Append(margin)
-               .Append(label.ToUpper());
-    }
-
-    return builder.ToString();
 }
 
 private static void Main()
