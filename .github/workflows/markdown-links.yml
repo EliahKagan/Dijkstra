@@ -10,12 +10,5 @@ jobs:
   markdown-link-check:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Test links (retry enabled)
-        uses: Wandalen/wretry.action@v1.0.36
-        with:
-          action: gaurav-nelson/github-action-markdown-link-check@v1
-          attempt_limit: 3
-          attempt_delay: 5000
+      - uses: actions/checkout@v3
+      - uses: gaurav-nelson/github-action-markdown-link-check@v1
