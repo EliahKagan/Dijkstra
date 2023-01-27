@@ -2,8 +2,6 @@ name: Check Markdown links
 
 on:
   push:
-    branches:
-      - master
   pull_request:
   schedule:
     - cron: '15 0,12 * * *'
@@ -12,5 +10,12 @@ jobs:
   markdown-link-check:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    - uses: gaurav-nelson/github-action-markdown-link-check@v1
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Test links (retry enabled)
+        uses: Wandalen/wretry.action@v1.0.36
+        with:
+          action: gaurav-nelson/github-action-markdown-link-check@v1
+          attempt_limit: 3
+          attempt_delay: 5000
