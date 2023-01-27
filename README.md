@@ -539,7 +539,8 @@ page](https://graphviz.org/credits/).
 
 ## Future Directions
 
-See also [Other Bugs](#other-bugs) above.
+<!-- FIXME: Link temporarily broken for testing. Fix link after testing. -->
+See also [Other Bugs](#other-bugsz) above.
 
 ### Graph generator redesign
 
