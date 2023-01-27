@@ -576,8 +576,9 @@ control).
 **The main work I&rsquo;ve done to try and eliminate that lag is on the `async`
 branch.** I refactored much of the overall design of the code (though not most
 of the lower-level details) and also made some parts
-[asynchronous](https://docs.microsoft.com/en-us/dotnet/csharp/async). This
-produced some improvement, but there was still sometimes some lag.
+<!-- FIXME: Link temporarily broken for testing. Fix link after testing. -->
+[asynchronous](https://docs.microsoft.com/en-us/dotnet/csharp/asyncq).
+This produced some improvement, but there was still sometimes some lag.
 
 On that branch, I also added two other features:
 
